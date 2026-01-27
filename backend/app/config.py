@@ -8,5 +8,9 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
 
+class Settings(BaseSettings):
+    ENV: str
+    SECRET_KEY: str
+    DATABASE_URL: str
 
 settings = Settings()
