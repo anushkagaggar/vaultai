@@ -1,0 +1,32 @@
+# Environments
+venv/
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# FastAPI / Uvicorn
+*.log
+
+# Alembic
+alembic/versions/__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Node (frontend)
+node_modules/
+.next/
+out/
+
+# Build
+dist/
+build/
