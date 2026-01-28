@@ -27,10 +27,17 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
             detail="Email already registered"
         )
 
+    if len(user.password) > 72:
+        raise HTTPException(
+            status_code=400,
+            detail="Password too long (max 72 characters)"
+        )
+
     new_user = User(
         email=user.email,
         password_hash=hash_password(user.password)
     )
+
 
     db.add(new_user)
     await db.commit()
