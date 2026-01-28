@@ -1,5 +1,5 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -7,13 +7,12 @@ from sqlalchemy.future import select
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
-
+security = HTTPBearer()
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ):
 
@@ -24,6 +23,7 @@ async def get_current_user(
     )
 
     try:
+        token = credentials.credentials
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
