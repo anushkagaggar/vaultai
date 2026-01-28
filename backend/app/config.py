@@ -17,5 +17,9 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    JWT_ALGORITHM: str = "HS256"
+
+
 
 settings = Settings()
