@@ -24,6 +24,6 @@ class Expense(Base):
 
     expense_date = Column(Date, nullable=False)
 
-    metadata = Column(JSON)
+    extra_data = Column(JSON)
 
     user = relationship("User", backref="expenses")
