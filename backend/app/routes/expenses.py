@@ -6,7 +6,8 @@ from app.middleware.auth import get_current_user
 from app.models.expense import Expense
 from app.models.user import User
 from app.schemas.expense import ExpenseCreate, ExpenseOut
-
+from sqlalchemy.future import select
+from sqlalchemy import desc
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
@@ -36,3 +37,25 @@ async def create_expense(
     await db.refresh(new_expense)
 
     return new_expense
+
+@router.get("/", response_model=list[ExpenseOut])
+async def list_expenses(
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+
+    query = (
+        select(Expense)
+        .where(Expense.user_id == current_user.id)
+        .order_by(desc(Expense.expense_date))
+        .offset(skip)
+        .limit(limit)
+    )
+
+    result = await db.execute(query)
+
+    expenses = result.scalars().all()
+
+    return expenses
