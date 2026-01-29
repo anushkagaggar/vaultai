@@ -60,7 +60,7 @@ async def create_expense(
     new_expense = Expense(
         user_id=current_user.id,
         amount=expense.amount,
-        category=expense.category,
+        category=expense.category.lower() if expense.category else None,
         description=expense.description,
         expense_date=expense.expense_date,
         extra_data=expense.extra_data,
@@ -94,6 +94,8 @@ async def update_expense(
         raise HTTPException(status_code=404, detail="Expense not found")
 
     data = expense.model_dump(exclude_unset=True)
+    if "category" in data and data["category"]:
+        data["category"] = data["category"].lower()
 
     for key, value in data.items():
         setattr(db_expense, key, value)
