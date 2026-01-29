@@ -4,9 +4,11 @@ from app.routes import auth
 from app.middleware.auth import get_current_user
 from app.models.user import User
 from fastapi import Depends
+from app.routes import expenses
 
 app = FastAPI()
 app.include_router(auth.router)
+app.include_router(expenses.router)
 
 
 @app.get("/health")
