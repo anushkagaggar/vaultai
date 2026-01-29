@@ -89,3 +89,27 @@ async def update_expense(
     await db.refresh(db_expense)
 
     return db_expense
+
+@router.delete("/{expense_id}", status_code=204)
+async def delete_expense(
+    expense_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+
+    result = await db.execute(
+        select(Expense).where(
+            Expense.id == expense_id,
+            Expense.user_id == current_user.id,
+        )
+    )
+
+    db_expense = result.scalar_one_or_none()
+
+    if not db_expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    await db.delete(db_expense)
+    await db.commit()
+
+    return None
