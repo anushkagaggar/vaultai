@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, JSON, Index, CheckConstraint
 from sqlalchemy.orm import relationship
+from datetime import date
 
 from app.models.base import Base
 
@@ -17,13 +18,21 @@ class Expense(Base):
     )
 
     amount = Column(Float, nullable=False)
+    __table_args__ = (
+    CheckConstraint("amount > 0", name="check_amount_positive"),
+    Index("idx_expenses_user_date", "user_id", "expense_date"),
+    )
 
     category = Column(String(100), nullable=False)
 
     description = Column(String(255))
 
-    expense_date = Column(Date, nullable=False)
+    expense_date = Column(Date, default=date.today, nullable=False)
 
     extra_data = Column(JSON)
 
     user = relationship("User", backref="expenses")
+
+    __table_args__ = (
+    Index("idx_expenses_user_date", "user_id", "expense_date"),
+    )
