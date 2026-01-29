@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta, UTC
 from jose import jwt
+import secrets
 
 from app.config import settings
 
+def create_refresh_token() -> str:
+    return secrets.token_urlsafe(32)
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()

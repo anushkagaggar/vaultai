@@ -15,3 +15,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    refresh_token = Column(String(255), nullable=True, index=True)
+
+    refresh_token_expires_at = Column(DateTime(timezone=True), nullable=True)
