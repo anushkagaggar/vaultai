@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date
 from typing import Optional
@@ -131,27 +131,43 @@ async def delete_expense(
 
 @router.get("/stats")
 async def expense_stats(
+    from_date: date | None = Query(None),
+    to_date: date | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
 
-    # Total spent
-    total_result = await db.execute(
-        select(func.sum(Expense.amount))
-        .where(Expense.user_id == current_user.id)
+    query = select(func.sum(Expense.amount)).where(
+        Expense.user_id == current_user.id
     )
+
+    if from_date:
+        query = query.where(Expense.expense_date >= from_date)
+
+    if to_date:
+        query = query.where(Expense.expense_date <= to_date)
+
+    total_result = await db.execute(query)
 
     total = total_result.scalar() or 0
 
     # Group by category
-    category_result = await db.execute(
-        select(
-            Expense.category,
-            func.sum(Expense.amount)
-        )
-        .where(Expense.user_id == current_user.id)
-        .group_by(Expense.category)
+    category_query = select(
+        Expense.category,
+        func.sum(Expense.amount)
+    ).where(
+        Expense.user_id == current_user.id
     )
+
+    if from_date:
+        category_query = category_query.where(Expense.expense_date >= from_date)
+
+    if to_date:
+        category_query = category_query.where(Expense.expense_date <= to_date)
+
+    category_query = category_query.group_by(Expense.category)
+
+    category_result = await db.execute(category_query)
 
     rows = category_result.all()
 
