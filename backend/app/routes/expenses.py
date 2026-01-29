@@ -8,7 +8,7 @@ from app.models.expense import Expense
 from app.models.user import User
 from app.schemas.expense import ExpenseCreate, ExpenseOut
 from sqlalchemy.future import select
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from app.schemas.expense import ExpenseUpdate
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
@@ -126,3 +126,38 @@ async def delete_expense(
     await db.commit()
 
     return None
+
+@router.get("/stats")
+async def expense_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+
+    # Total spent
+    total_result = await db.execute(
+        select(func.sum(Expense.amount))
+        .where(Expense.user_id == current_user.id)
+    )
+
+    total = total_result.scalar() or 0
+
+    # Group by category
+    category_result = await db.execute(
+        select(
+            Expense.category,
+            func.sum(Expense.amount)
+        )
+        .where(Expense.user_id == current_user.id)
+        .group_by(Expense.category)
+    )
+
+    rows = category_result.all()
+
+    by_category = {
+        category: amount for category, amount in rows
+    }
+
+    return {
+        "total": total,
+        "by_category": by_category
+    }
