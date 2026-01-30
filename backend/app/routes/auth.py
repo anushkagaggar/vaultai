@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from datetime import datetime, timedelta, UTC
+from app.middleware.ratelimit import rate_limit
+from fastapi import Depends
 
 from app.database import get_db
 from app.models.user import User
@@ -14,7 +16,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=Token)
-async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(user: UserCreate, db: AsyncSession = Depends(get_db), _: None = Depends(rate_limit)):
 
     result = await db.execute(
         select(User).where(User.email == user.email)
@@ -65,7 +67,7 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(user: UserLogin, db: AsyncSession = Depends(get_db), _: None = Depends(rate_limit)):
 
     result = await db.execute(
         select(User).where(User.email == user.email)
