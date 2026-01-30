@@ -29,7 +29,8 @@ async def test_expense_crud():
         res = await ac.post("/expenses/", json={
             "amount": 100,
             "category": "food",
-            "description": "test"
+            "description": "test", 
+            "expense_date": "2026-01-30"
         }, headers=headers)
 
         assert res.status_code == 201

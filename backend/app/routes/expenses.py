@@ -67,7 +67,7 @@ async def create_expense(
         amount=expense.amount,
         category=expense.category.lower() if expense.category else None,
         description=expense.description,
-        expense_date=expense.expense_date,
+        expense_date=expense.expense_date or date.today(),
         extra_data=expense.extra_data,
     )
 

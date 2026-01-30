@@ -8,7 +8,7 @@ class ExpenseCreate(BaseModel):
     amount: float = Field(gt=0)
     category: str = Field(max_length=100)
     description: Optional[str] = Field(None, max_length=255)
-    expense_date: date
+    expense_date: Optional[date] = None
     extra_data: Optional[Dict[str, Any]] = None
     @field_validator("category", "description", mode="before")
     @classmethod
