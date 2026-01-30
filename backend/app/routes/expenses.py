@@ -11,38 +11,43 @@ from sqlalchemy.future import select
 from sqlalchemy import desc, func
 from app.schemas.expense import ExpenseUpdate
 router = APIRouter(prefix="/expenses", tags=["expenses"])
+from sqlalchemy import desc, asc
+
 
 @router.get("/", response_model=list[ExpenseOut])
 async def list_expenses(
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    category: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
+    sort: str = "expense_date",   # expense_date / amount / category
+    order: str = "desc",          # asc / desc
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
 
-    query = select(Expense).where(
-        Expense.user_id == current_user.id
-    )
+    # Allowed fields (prevent SQL injection)
+    sort_map = {
+        "expense_date": Expense.expense_date,
+        "amount": Expense.amount,
+        "category": Expense.category,
+    }
 
-    if start_date:
-        query = query.where(Expense.expense_date >= start_date)
+    if sort not in sort_map:
+        raise HTTPException(400, detail="Invalid sort field")
 
-    if end_date:
-        query = query.where(Expense.expense_date <= end_date)
+    sort_column = sort_map[sort]
 
-    if category:
-        query = query.where(Expense.category == category)
+    order_func = desc if order == "desc" else asc
 
     query = (
-        query.order_by(desc(Expense.expense_date))
+        select(Expense)
+        .where(Expense.user_id == current_user.id)
+        .order_by(order_func(sort_column))
         .offset(skip)
         .limit(limit)
     )
 
     result = await db.execute(query)
+
     return result.scalars().all()
 
 
