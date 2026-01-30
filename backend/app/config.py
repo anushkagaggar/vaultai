@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     ENV: str
     SECRET_KEY: str
     DATABASE_URL: str
+    TEST_DATABASE_URL: str | None = None
+
 
     model_config = SettingsConfigDict(
         env_file=".env",
