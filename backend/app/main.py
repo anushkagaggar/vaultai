@@ -5,10 +5,26 @@ from app.middleware.auth import get_current_user
 from app.models.user import User
 from fastapi import Depends
 from app.routes import expenses
+from app.middleware.errors import (
+    http_exception_handler,
+    validation_exception_handler,
+    generic_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app = FastAPI()
 app.include_router(auth.router)
 app.include_router(expenses.router)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
 
 
 @app.get("/health")
