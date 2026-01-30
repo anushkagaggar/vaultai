@@ -12,3 +12,4 @@ email-validator
 pytest 
 httpx 
 pytest-asyncio
+aiosqlite # for testing purpose
