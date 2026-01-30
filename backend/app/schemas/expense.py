@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional, Dict, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ExpenseCreate(BaseModel):
@@ -10,6 +10,19 @@ class ExpenseCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=255)
     expense_date: date
     extra_data: Optional[Dict[str, Any]] = None
+    @field_validator("category", "description", mode="before")
+    @classmethod
+    def clean_text(cls, v):
+        if v is None:
+            return v
+
+        v = v.strip()
+
+        if not v:
+            raise ValueError("Field cannot be empty")
+
+        return v
+
 
 
 class ExpenseUpdate(BaseModel):
@@ -18,6 +31,18 @@ class ExpenseUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=255)
     expense_date: Optional[date] = None
     extra_data: Optional[Dict[str, Any]] = None
+    @field_validator("category", "description", mode="before")
+    @classmethod
+    def clean_text(cls, v):
+        if v is None:
+            return v
+
+        v = v.strip()
+
+        if not v:
+            raise ValueError("Field cannot be empty")
+
+        return v
 
 
 class ExpenseOut(BaseModel):
