@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     ENV: str
     SECRET_KEY: str
     DATABASE_URL: str
+    SYNC_DATABASE_URL: str
     TEST_DATABASE_URL: str | None = None
 
 
