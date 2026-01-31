@@ -12,6 +12,9 @@ from app.middleware.errors import (
 )
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from app.middleware.ratelimit import rate_limit
+import logging
+from app.middleware.logging import log_requests
 
 app = FastAPI()
 app.include_router(auth.router)
@@ -19,7 +22,9 @@ app.include_router(expenses.router)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
-import logging
+
+app.middleware("http")(rate_limit)
+app.middleware("http")(log_requests)
 
 logging.basicConfig(
     level=logging.INFO,

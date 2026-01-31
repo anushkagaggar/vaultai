@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 security = HTTPBearer()
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ):
@@ -46,5 +47,5 @@ async def get_current_user(
 
     if user is None:
         raise credentials_exception
-
+    request.state.user_id = user.id
     return user
