@@ -1,24 +1,24 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-if (!API_BASE) {
-  throw new Error("API URL not defined");
+if (!API_URL) {
+  throw new Error("NEXT_PUBLIC_API_URL not set");
 }
 
 export async function apiFetch(
-  endpoint: string,
+  path: string,
   options: RequestInit = {}
 ) {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
     headers: {
       "Content-Type": "application/json",
-      ...options.headers,
+      ...(options.headers || {}),
     },
-    ...options,
   });
 
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || "API Error");
+    const text = await res.text();
+    throw new Error(text || "Request failed");
   }
 
   return res.json();
