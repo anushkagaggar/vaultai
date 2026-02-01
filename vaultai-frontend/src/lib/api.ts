@@ -8,21 +8,27 @@ export async function apiFetch(
   path: string,
   options: RequestInit = {}
 ) {
+  const token = localStorage.getItem("token");
+
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...options.headers,
+  };
+
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
+    headers,
   });
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || "Request failed");
+    throw new Error(text || res.statusText);
   }
 
   return res.json();
 }
+
 export async function registerUser(data: {
   email: string;
   password: string;
@@ -38,6 +44,21 @@ export async function loginUser(data: {
   password: string;
 }) {
   return apiFetch("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getExpenses() {
+  return apiFetch("/expenses");
+}
+
+export async function createExpense(data: {
+  amount: number;
+  category: string;
+  description?: string;
+}) {
+  return apiFetch("/expenses", {
     method: "POST",
     body: JSON.stringify(data),
   });
