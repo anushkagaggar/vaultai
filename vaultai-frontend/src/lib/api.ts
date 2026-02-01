@@ -23,3 +23,22 @@ export async function apiFetch(
 
   return res.json();
 }
+export async function registerUser(data: {
+  email: string;
+  password: string;
+}) {
+  return apiFetch("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function loginUser(data: {
+  email: string;
+  password: string;
+}) {
+  return apiFetch("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
