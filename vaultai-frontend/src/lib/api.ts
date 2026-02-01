@@ -21,12 +21,20 @@ export async function apiFetch(
     headers,
   });
 
+  if (res.status === 401) {
+  localStorage.removeItem("token");
+  window.location.href = "/login";
+  return;}
+
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || res.statusText);
-  }
+  const text = await res.text();
+  throw new Error(text || res.statusText);}
 
   return res.json();
+}
+
+export async function getMe() {
+  return apiFetch("/me");
 }
 
 export async function registerUser(data: {
