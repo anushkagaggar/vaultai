@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createExpense, getMe } from "@/lib/api";
+import { createExpense, getMe, getExpenses } from "@/lib/api";
 
 export default function Dashboard() {
   // ---------------- STATE ----------------
@@ -10,6 +10,8 @@ export default function Dashboard() {
   const [category, setCategory] = useState("");
   const [date, setDate] = useState("");
   const [description, setDescription] = useState("");
+
+  const [filterCategory, setFilterCategory] = useState("");
 
   const [extras, setExtras] = useState<
     { key: string; value: string }[]
@@ -61,6 +63,18 @@ export default function Dashboard() {
     window.location.href = "/auth";
   }
 
+  // ---------------- LOAD EXPENSES (A1) ----------------
+
+  async function loadExpenses() {
+    try {
+      await getExpenses({
+        category: filterCategory || undefined,
+      });
+    } catch {
+      alert("Failed to load expenses");
+    }
+  }
+
   // ---------------- ADD EXPENSE ----------------
 
   async function add() {
@@ -97,6 +111,9 @@ export default function Dashboard() {
       setDescription("");
       setExtras([]);
 
+      // Refresh list
+      loadExpenses();
+
     } catch (err: any) {
       alert(err.message || "Failed to add expense");
     }
@@ -122,6 +139,11 @@ export default function Dashboard() {
 
   }, []);
 
+  // Reload when filter changes
+  useEffect(() => {
+    loadExpenses();
+  }, [filterCategory]);
+
   // ---------------- UI ----------------
 
   return (
@@ -145,6 +167,15 @@ export default function Dashboard() {
           Logged in as: {user.email}
         </p>
       )}
+
+      {/* FILTER (A1) */}
+      <div style={{ marginTop: 20 }}>
+        <input
+          placeholder="Filter by category"
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+        />
+      </div>
 
       {/* ADD FORM */}
       <div style={{ marginTop: 25 }}>
