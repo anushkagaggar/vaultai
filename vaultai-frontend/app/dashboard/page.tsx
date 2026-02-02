@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  createExpense,
-  getMe,
-  getExpenses,
-} from "@/lib/api";
+import { createExpense, getMe, getExpenses } from "@/lib/api";
 
 export default function Dashboard() {
 
@@ -24,19 +20,40 @@ export default function Dashboard() {
   const [user, setUser] = useState<any | null>(null);
 
   const [expenses, setExpenses] = useState<any[]>([]);
-  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterCategory, setFilterCategory] = useState("");
 
-  // ---------------- TABLE STYLES ----------------
+  // ---------------- STYLES ----------------
+
+  const inputStyle = {
+    background: "#111",
+    color: "white",
+    border: "1px solid #444",
+    padding: "8px",
+    borderRadius: "4px",
+  };
+
+  const buttonStyle = {
+    background: "#2563eb",
+    color: "white",
+    border: "none",
+    padding: "8px 14px",
+    borderRadius: "4px",
+    cursor: "pointer",
+  };
 
   const thStyle = {
-    border: "1px solid #555",
+    border: "1px solid #444",
     padding: "10px",
     textAlign: "left" as const,
+    background: "#222",
+    color: "white",
   };
 
   const tdStyle = {
-    border: "1px solid #555",
+    border: "1px solid #444",
     padding: "10px",
+    background: "#111",
+    color: "white",
   };
 
   // ---------------- EXTRA DATA ----------------
@@ -70,13 +87,10 @@ export default function Dashboard() {
 
   // ---------------- LOAD EXPENSES ----------------
 
-  async function loadExpenses() {
+  async function loadExpenses(selected: string) {
     try {
       const data = await getExpenses({
-        category:
-          filterCategory === "all"
-            ? undefined
-            : filterCategory,
+        category: selected || undefined,
       });
 
       setExpenses(data);
@@ -120,7 +134,9 @@ export default function Dashboard() {
       setDescription("");
       setExtras([]);
 
-      loadExpenses();
+      if (filterCategory) {
+        loadExpenses(filterCategory);
+      }
 
     } catch (err: any) {
       alert(err.message || "Failed");
@@ -145,14 +161,7 @@ export default function Dashboard() {
         window.location.href = "/auth";
       });
 
-    loadExpenses();
-
   }, []);
-
-  // Reload on filter change
-  useEffect(() => {
-    loadExpenses();
-  }, [filterCategory]);
 
   // ---------------- UNIQUE CATEGORIES ----------------
 
@@ -160,172 +169,223 @@ export default function Dashboard() {
     new Set(expenses.map((e) => e.category))
   );
 
+  // ---------------- FILTER HANDLER ----------------
+
+  function handleFilterChange(value: string) {
+    setFilterCategory(value);
+
+    if (value === "") {
+      setExpenses([]);
+      return;
+    }
+
+    loadExpenses(value);
+  }
+
   // ---------------- UI ----------------
 
   return (
-    <div style={{ padding: 40 }}>
+    <div
+      style={{
+        padding: 40,
+        background: "#000",
+        minHeight: "100vh",
+        color: "white",
+      }}
+    >
 
       {/* HEADER */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
+          alignItems: "center",
         }}
       >
         <h2>Dashboard</h2>
-        <button onClick={logout}>Logout</button>
+
+        <button style={buttonStyle} onClick={logout}>
+          Logout
+        </button>
       </div>
 
       {/* USER */}
       {user && (
-        <p style={{ color: "gray" }}>
-          {user.email}
+        <p style={{ color: "#aaa" }}>
+          Logged in as: {user.email}
         </p>
       )}
 
       {/* ADD FORM */}
-      <div style={{ marginTop: 25 }}>
+      <div style={{ marginTop: 25, display: "flex", gap: 10, flexWrap: "wrap" }}>
 
         <input
           placeholder="Amount"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
+          style={inputStyle}
         />
 
         <input
           placeholder="Category"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
+          style={inputStyle}
         />
 
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
+          style={inputStyle}
         />
 
         <input
           placeholder="Description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
+          style={inputStyle}
         />
 
-        {/* EXTRA */}
-        <div style={{ marginTop: 10 }}>
+      </div>
 
-          <h4>Extra Data</h4>
 
-          {extras.map((ex, i) => (
-            <div key={i} style={{ display: "flex", gap: 8 }}>
+      {/* EXTRA */}
+      <div style={{ marginTop: 15 }}>
 
-              <input
-                placeholder="Key"
-                value={ex.key}
-                onChange={(e) =>
-                  updateExtra(i, "key", e.target.value)
-                }
-              />
+        <h4>Extra Data</h4>
 
-              <input
-                placeholder="Value"
-                value={ex.value}
-                onChange={(e) =>
-                  updateExtra(i, "value", e.target.value)
-                }
-              />
+        {extras.map((ex, i) => (
 
-              <button onClick={() => removeExtra(i)}>X</button>
+          <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
 
-            </div>
-          ))}
+            <input
+              placeholder="Key"
+              value={ex.key}
+              onChange={(e) =>
+                updateExtra(i, "key", e.target.value)
+              }
+              style={inputStyle}
+            />
 
-          <button onClick={addExtra}>+</button>
+            <input
+              placeholder="Value"
+              value={ex.value}
+              onChange={(e) =>
+                updateExtra(i, "value", e.target.value)
+              }
+              style={inputStyle}
+            />
 
-        </div>
+            <button
+              style={{
+                background: "#dc2626",
+                color: "white",
+                border: "none",
+                padding: "4px 8px",
+              }}
+              onClick={() => removeExtra(i)}
+            >
+              X
+            </button>
 
-        <button
-          style={{ marginTop: 15 }}
-          onClick={add}
-        >
-          Add Expense
+          </div>
+
+        ))}
+
+        <button style={buttonStyle} onClick={addExtra}>
+          +
         </button>
 
       </div>
 
 
-      {/* FILTER (A1 FIXED) */}
-      <div style={{ marginTop: 30 }}>
+      <button
+        style={{ ...buttonStyle, marginTop: 15 }}
+        onClick={add}
+      >
+        Add Expense
+      </button>
 
-        <label>Filter by Category: </label>
 
-              <select
-                  value={filterCategory}
-                  onChange={(e) => setFilterCategory(e.target.value)}
-                  style={{
-                      backgroundColor: "white",
-                      color: "black",
-                      padding: "6px",
-                      borderRadius: "4px",
-                      border: "1px solid #ccc",
-                  }}
-              >
-                  <option value="all" style={{ color: "black" }}>
-                      All
-                  </option>
+      {/* FILTER */}
+      <div style={{ marginTop: 35 }}>
 
-                  {categories.map((c) => (
-                      <option key={c} value={c} style={{ color: "black" }}>
-                          {c}
-                      </option>
-                  ))}
+        <label style={{ marginRight: 10 }}>
+          Filter:
+        </label>
+
+        <select
+          value={filterCategory}
+          onChange={(e) => handleFilterChange(e.target.value)}
+          style={{
+            background: "white",
+            color: "black",
+            padding: "6px",
+            borderRadius: "4px",
+          }}
+        >
+          <option value="">Select</option>
+
+          <option value="all">All</option>
+
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
         </select>
 
       </div>
 
 
       {/* EXPENSE LIST */}
-      <div style={{ marginTop: 30 }}>
+      {expenses.length > 0 && (
 
-        <h3>Expenses</h3>
+        <div style={{ marginTop: 35 }}>
 
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-          }}
-        >
+          <h3>Expenses</h3>
 
-          <thead>
-            <tr style={{ background: "#222" }}>
-              <th style={thStyle}>Amount</th>
-              <th style={thStyle}>Date</th>
-              <th style={thStyle}>Category</th>
-              <th style={thStyle}>Description</th>
-            </tr>
-          </thead>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+            }}
+          >
 
-          <tbody>
-
-            {expenses.map((e) => (
-
-              <tr key={e.id} style={{ background: "#111" }}>
-
-                <td style={tdStyle}>{e.amount}</td>
-                <td style={tdStyle}>{e.expense_date}</td>
-                <td style={tdStyle}>{e.category}</td>
-                <td style={tdStyle}>
-                  {e.description || "-"}
-                </td>
-
+            <thead>
+              <tr>
+                <th style={thStyle}>Amount</th>
+                <th style={thStyle}>Date</th>
+                <th style={thStyle}>Category</th>
+                <th style={thStyle}>Description</th>
               </tr>
+            </thead>
 
-            ))}
+            <tbody>
 
-          </tbody>
+              {expenses.map((e) => (
 
-        </table>
+                <tr key={e.id}>
 
-      </div>
+                  <td style={tdStyle}>{e.amount}</td>
+                  <td style={tdStyle}>{e.expense_date}</td>
+                  <td style={tdStyle}>{e.category}</td>
+                  <td style={tdStyle}>
+                    {e.description || "-"}
+                  </td>
+
+                </tr>
+
+              ))}
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+      )}
 
 
       {/* LATEST */}
@@ -335,11 +395,18 @@ export default function Dashboard() {
 
           <h3>Latest Expense</h3>
 
-          <pre>
+          <pre
+            style={{
+              background: "#111",
+              padding: 15,
+              border: "1px solid #444",
+            }}
+          >
             {JSON.stringify(latest, null, 2)}
           </pre>
 
         </div>
+
       )}
 
     </div>
