@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createExpense, getMe, getExpenses } from "@/lib/api";
+import {
+  createExpense,
+  getMe,
+  getExpenses,
+} from "@/lib/api";
 
 export default function Dashboard() {
+
   // ---------------- STATE ----------------
 
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [date, setDate] = useState("");
   const [description, setDescription] = useState("");
-
-  const [filterCategory, setFilterCategory] = useState("");
 
   const [extras, setExtras] = useState<
     { key: string; value: string }[]
@@ -20,18 +23,20 @@ export default function Dashboard() {
   const [latest, setLatest] = useState<any | null>(null);
   const [user, setUser] = useState<any | null>(null);
 
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [filterCategory, setFilterCategory] = useState("all");
+
   // ---------------- TABLE STYLES ----------------
 
   const thStyle = {
-    border: "1px solid #666",
+    border: "1px solid #555",
     padding: "10px",
     textAlign: "left" as const,
   };
 
   const tdStyle = {
-    border: "1px solid #666",
+    border: "1px solid #555",
     padding: "10px",
-    verticalAlign: "top" as const,
   };
 
   // ---------------- EXTRA DATA ----------------
@@ -63,13 +68,19 @@ export default function Dashboard() {
     window.location.href = "/auth";
   }
 
-  // ---------------- LOAD EXPENSES (A1) ----------------
+  // ---------------- LOAD EXPENSES ----------------
 
   async function loadExpenses() {
     try {
-      await getExpenses({
-        category: filterCategory || undefined,
+      const data = await getExpenses({
+        category:
+          filterCategory === "all"
+            ? undefined
+            : filterCategory,
       });
+
+      setExpenses(data);
+
     } catch {
       alert("Failed to load expenses");
     }
@@ -79,12 +90,12 @@ export default function Dashboard() {
 
   async function add() {
     try {
+
       if (!amount || !category || !date) {
-        alert("Fill all required fields");
+        alert("Fill required fields");
         return;
       }
 
-      // Convert extras → object
       const extraObj: Record<string, string> = {};
 
       extras.forEach((e) => {
@@ -101,27 +112,25 @@ export default function Dashboard() {
         extra_data: extraObj,
       });
 
-      // Show latest only
       setLatest(newExpense);
 
-      // Reset form
       setAmount("");
       setCategory("");
       setDate("");
       setDescription("");
       setExtras([]);
 
-      // Refresh list
       loadExpenses();
 
     } catch (err: any) {
-      alert(err.message || "Failed to add expense");
+      alert(err.message || "Failed");
     }
   }
 
-  // ---------------- AUTH CHECK ----------------
+  // ---------------- AUTH ----------------
 
   useEffect(() => {
+
     const token = localStorage.getItem("token");
 
     if (!token) {
@@ -129,7 +138,6 @@ export default function Dashboard() {
       return;
     }
 
-    // Verify token
     getMe()
       .then(setUser)
       .catch(() => {
@@ -137,12 +145,20 @@ export default function Dashboard() {
         window.location.href = "/auth";
       });
 
+    loadExpenses();
+
   }, []);
 
-  // Reload when filter changes
+  // Reload on filter change
   useEffect(() => {
     loadExpenses();
   }, [filterCategory]);
+
+  // ---------------- UNIQUE CATEGORIES ----------------
+
+  const categories = Array.from(
+    new Set(expenses.map((e) => e.category))
+  );
 
   // ---------------- UI ----------------
 
@@ -154,28 +170,18 @@ export default function Dashboard() {
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
         }}
       >
         <h2>Dashboard</h2>
         <button onClick={logout}>Logout</button>
       </div>
 
-      {/* USER INFO */}
+      {/* USER */}
       {user && (
         <p style={{ color: "gray" }}>
-          Logged in as: {user.email}
+          {user.email}
         </p>
       )}
-
-      {/* FILTER (A1) */}
-      <div style={{ marginTop: 20 }}>
-        <input
-          placeholder="Filter by category"
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-        />
-      </div>
 
       {/* ADD FORM */}
       <div style={{ marginTop: 25 }}>
@@ -204,16 +210,14 @@ export default function Dashboard() {
           onChange={(e) => setDescription(e.target.value)}
         />
 
-        {/* EXTRA DATA */}
-        <div style={{ marginTop: 15 }}>
+        {/* EXTRA */}
+        <div style={{ marginTop: 10 }}>
 
           <h4>Extra Data</h4>
 
           {extras.map((ex, i) => (
-            <div
-              key={i}
-              style={{ display: "flex", gap: 8, marginBottom: 6 }}
-            >
+            <div key={i} style={{ display: "flex", gap: 8 }}>
+
               <input
                 placeholder="Key"
                 value={ex.key}
@@ -231,6 +235,7 @@ export default function Dashboard() {
               />
 
               <button onClick={() => removeExtra(i)}>X</button>
+
             </div>
           ))}
 
@@ -247,47 +252,85 @@ export default function Dashboard() {
 
       </div>
 
-      {/* LATEST EXPENSE */}
+
+      {/* FILTER (A1 FIXED) */}
+      <div style={{ marginTop: 30 }}>
+
+        <label>Filter by Category: </label>
+
+        <select
+          value={filterCategory}
+          onChange={(e) =>
+            setFilterCategory(e.target.value)
+          }
+        >
+          <option value="all">All</option>
+
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+
+      </div>
+
+
+      {/* EXPENSE LIST */}
+      <div style={{ marginTop: 30 }}>
+
+        <h3>Expenses</h3>
+
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+          }}
+        >
+
+          <thead>
+            <tr style={{ background: "#222" }}>
+              <th style={thStyle}>Amount</th>
+              <th style={thStyle}>Date</th>
+              <th style={thStyle}>Category</th>
+              <th style={thStyle}>Description</th>
+            </tr>
+          </thead>
+
+          <tbody>
+
+            {expenses.map((e) => (
+
+              <tr key={e.id} style={{ background: "#111" }}>
+
+                <td style={tdStyle}>{e.amount}</td>
+                <td style={tdStyle}>{e.expense_date}</td>
+                <td style={tdStyle}>{e.category}</td>
+                <td style={tdStyle}>
+                  {e.description || "-"}
+                </td>
+
+              </tr>
+
+            ))}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+
+      {/* LATEST */}
       {latest && (
 
         <div style={{ marginTop: 40 }}>
 
           <h3>Latest Expense</h3>
 
-          <table
-            style={{
-              width: "100%",
-              marginTop: 15,
-              borderCollapse: "collapse",
-              border: "1px solid #666",
-              color: "white",
-            }}
-          >
-            <thead>
-              <tr style={{ backgroundColor: "#222" }}>
-                <th style={thStyle}>Amount</th>
-                <th style={thStyle}>Date</th>
-                <th style={thStyle}>Category</th>
-                <th style={thStyle}>Description</th>
-                <th style={thStyle}>Extra Data</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr style={{ backgroundColor: "#111" }}>
-                <td style={tdStyle}>{latest.amount}</td>
-                <td style={tdStyle}>{latest.expense_date}</td>
-                <td style={tdStyle}>{latest.category}</td>
-                <td style={tdStyle}>{latest.description || "-"}</td>
-
-                <td style={tdStyle}>
-                  <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-                    {JSON.stringify(latest.extra_data, null, 2)}
-                  </pre>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <pre>
+            {JSON.stringify(latest, null, 2)}
+          </pre>
 
         </div>
       )}
