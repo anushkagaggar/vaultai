@@ -1,204 +1,264 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getExpenses, createExpense, getMe } from "@/lib/api";
+import { createExpense, getMe } from "@/lib/api";
 
 export default function Dashboard() {
-    const [expenses, setExpenses] = useState<any[]>([]);
-    const [amount, setAmount] = useState("");
-    const [category, setCategory] = useState("");
-    const [user, setUser] = useState<any>(null);
-    const [filter, setFilter] = useState("");
-    const [sort, setSort] = useState("expense_date");
-    const [order, setOrder] = useState("desc");
-    const [date, setDate] = useState("");
-    const [description, setDescription] = useState("");
-    const [extras, setExtras] = useState<
-        { key: string; value: string }[]
-    >([]);
+  // ---------------- STATE ----------------
 
-    function addExtra() {
-        setExtras([...extras, { key: "", value: "" }]);
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("");
+  const [date, setDate] = useState("");
+  const [description, setDescription] = useState("");
+
+  const [extras, setExtras] = useState<
+    { key: string; value: string }[]
+  >([]);
+
+  const [latest, setLatest] = useState<any | null>(null);
+  const [user, setUser] = useState<any | null>(null);
+
+
+  // ---------------- EXTRA DATA ----------------
+
+  function addExtra() {
+    setExtras([...extras, { key: "", value: "" }]);
+  }
+
+  function updateExtra(
+    index: number,
+    field: "key" | "value",
+    val: string
+  ) {
+    const copy = [...extras];
+    copy[index][field] = val;
+    setExtras(copy);
+  }
+
+  function removeExtra(index: number) {
+    const copy = [...extras];
+    copy.splice(index, 1);
+    setExtras(copy);
+  }
+
+
+  // ---------------- LOGOUT ----------------
+
+  function logout() {
+    localStorage.removeItem("token");
+    window.location.href = "/auth";
+  }
+
+
+  // ---------------- ADD EXPENSE ----------------
+
+  async function add() {
+    try {
+      if (!amount || !category || !date) {
+        alert("Fill all required fields");
+        return;
+      }
+
+      // Convert extras → object
+      const extraObj: Record<string, string> = {};
+
+      extras.forEach((e) => {
+        if (e.key && e.value) {
+          extraObj[e.key] = e.value;
+        }
+      });
+
+      const newExpense = await createExpense({
+        amount: Number(amount),
+        category,
+        description,
+        expense_date: date,
+        extra_data: extraObj,
+      });
+
+      // Show latest only
+      setLatest(newExpense);
+
+      // Reset form
+      setAmount("");
+      setCategory("");
+      setDate("");
+      setDescription("");
+      setExtras([]);
+
+    } catch (err: any) {
+      alert(err.message || "Failed to add expense");
+    }
+  }
+
+
+  // ---------------- ROUTE GUARD + VERIFY ----------------
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      window.location.href = "/auth";
+      return;
     }
 
-    function updateExtra(
-        index: number,
-        field: "key" | "value",
-        val: string
-    ) {
-        const copy = [...extras];
-        copy[index][field] = val;
-        setExtras(copy);
-    }
-
-    function removeExtra(index: number) {
-        const copy = [...extras];
-        copy.splice(index, 1);
-        setExtras(copy);
-    }
-
-
-
-
-    // ---------- LOGOUT ----------
-    function logout() {
+    // Verify token + load user
+    getMe()
+      .then(setUser)
+      .catch(() => {
         localStorage.removeItem("token");
         window.location.href = "/auth";
-    }
+      });
 
-    // ---------- LOAD DATA ----------
-    async function load() {
-        try {
-            const data = await getExpenses({
-                category: filter || undefined,
-                sort,
-                order,
-            });
-
-            setExpenses(data);
-        } catch {
-            alert("Session expired. Login again.");
-        }
-    }
+  }, []);
 
 
-    // ---------- ADD EXPENSE ----------
-    async function add() {
-        if (!amount || !category || !date) {
-            alert("Fill required fields");
-            return;
-        }
+  // ---------------- UI ----------------
 
-        // Convert extras → dict
-        const extraObj: Record<string, string> = {};
+  return (
+    <div style={{ padding: 40 }}>
 
-        extras.forEach((e) => {
-            if (e.key && e.value) {
-                extraObj[e.key] = e.value;
-            }
-        });
-
-        await createExpense({
-            amount: Number(amount),
-            category,
-            description,
-            expense_date: date,
-            extra_data: extraObj,
-        });
-
-        setAmount("");
-        setCategory("");
-        setDate("");
-        setDescription("");
-        setExtras([]);
-
-        load();
-    }
+      {/* HEADER */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <h2>Dashboard</h2>
+        <button onClick={logout}>Logout</button>
+      </div>
 
 
-    // ---------- ROUTE GUARD ----------
-    useEffect(() => {
-        const token = localStorage.getItem("token");
+      {/* USER INFO */}
+      {user && (
+        <p style={{ color: "gray" }}>
+          Logged in as: {user.email}
+        </p>
+      )}
 
-        if (!token) {
-            window.location.href = "/auth";
-            return;
-        }
 
-        load();
-    }, []);
+      {/* ADD FORM */}
+      <div style={{ marginTop: 25 }}>
 
-    return (
-        <div style={{ padding: 40 }}>
+        <input
+          placeholder="Amount"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
 
-            {/* HEADER */}
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <h2>Dashboard</h2>
+        <input
+          placeholder="Category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+        />
 
-                <button onClick={logout}>Logout</button>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
+
+        <input
+          placeholder="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+
+
+        {/* EXTRA DATA */}
+        <div style={{ marginTop: 15 }}>
+
+          <h4>Extra Data</h4>
+
+          {extras.map((ex, i) => (
+            <div
+              key={i}
+              style={{ display: "flex", gap: 8, marginBottom: 6 }}
+            >
+              <input
+                placeholder="Key"
+                value={ex.key}
+                onChange={(e) =>
+                  updateExtra(i, "key", e.target.value)
+                }
+              />
+
+              <input
+                placeholder="Value"
+                value={ex.value}
+                onChange={(e) =>
+                  updateExtra(i, "value", e.target.value)
+                }
+              />
+
+              <button onClick={() => removeExtra(i)}>X</button>
             </div>
+          ))}
 
-            {/* USER INFO */}
-            {user && (
-                <p style={{ color: "gray" }}>
-                    Logged in as: {user.email}
-                </p>
-            )}
-
-            {/* ADD FORM */}
-            <div style={{ marginTop: 20 }}>
-
-                <input
-                    placeholder="Amount"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                />
-
-                <input
-                    placeholder="Category"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                />
-
-                <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                />
-
-                <input
-                    placeholder="Description"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                />
-
-                {/* EXTRA DATA */}
-                <div style={{ marginTop: 10 }}>
-                    <h4>Extra Data</h4>
-
-                    {extras.map((ex, i) => (
-                        <div key={i} style={{ display: "flex", gap: 8 }}>
-                            <input
-                                placeholder="Key"
-                                value={ex.key}
-                                onChange={(e) =>
-                                    updateExtra(i, "key", e.target.value)
-                                }
-                            />
-
-                            <input
-                                placeholder="Value"
-                                value={ex.value}
-                                onChange={(e) =>
-                                    updateExtra(i, "value", e.target.value)
-                                }
-                            />
-
-                            <button onClick={() => removeExtra(i)}>X</button>
-                        </div>
-                    ))}
-
-                    <button onClick={addExtra}>+</button>
-                </div>
-
-                <button style={{ marginTop: 10 }} onClick={add}>
-                    Add
-                </button>
-            </div>
-
-
-
-            {/* LIST */}
-            <h3 style={{ marginTop: 30 }}>Expenses</h3>
-
-            <ul>
-                {expenses.map((e) => (
-                    <li key={e.id}>
-                        {e.amount} — {e.category}
-                    </li>
-                ))}
-            </ul>
+          <button onClick={addExtra}>+</button>
 
         </div>
-    );
+
+
+        <button
+          style={{ marginTop: 15 }}
+          onClick={add}
+        >
+          Add Expense
+        </button>
+
+      </div>
+
+
+      {/* LATEST EXPENSE */}
+      {latest && (
+
+        <div style={{ marginTop: 40 }}>
+
+          <h3>Latest Expense</h3>
+
+          <table
+            border={1}
+            cellPadding={8}
+            style={{ borderCollapse: "collapse" }}
+          >
+
+            <thead>
+              <tr>
+                <th>Amount</th>
+                <th>Date</th>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Extra Data</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr>
+                <td>{latest.amount}</td>
+                <td>{latest.expense_date}</td>
+                <td>{latest.category}</td>
+                <td>{latest.description || "-"}</td>
+
+                <td>
+                  <pre style={{ margin: 0 }}>
+                    {JSON.stringify(
+                      latest.extra_data,
+                      null,
+                      2
+                    )}
+                  </pre>
+                </td>
+              </tr>
+            </tbody>
+
+          </table>
+
+        </div>
+      )}
+
+    </div>
+  );
 }
