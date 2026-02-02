@@ -78,9 +78,12 @@ export async function createExpense(data: {
   amount: number;
   category: string;
   description?: string;
+  expense_date?: string;
+  extra_data?: Record<string, string>;
 }) {
   return apiFetch("/expenses", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
+
