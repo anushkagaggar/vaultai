@@ -178,7 +178,7 @@ export default function Dashboard() {
                         </div>
                     ))}
 
-                    <button onClick={addExtra}>+ Add Extra</button>
+                    <button onClick={addExtra}>+</button>
                 </div>
 
                 <button style={{ marginTop: 10 }} onClick={add}>
