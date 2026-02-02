@@ -258,19 +258,26 @@ export default function Dashboard() {
 
         <label>Filter by Category: </label>
 
-        <select
-          value={filterCategory}
-          onChange={(e) =>
-            setFilterCategory(e.target.value)
-          }
-        >
-          <option value="all">All</option>
+              <select
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  style={{
+                      backgroundColor: "white",
+                      color: "black",
+                      padding: "6px",
+                      borderRadius: "4px",
+                      border: "1px solid #ccc",
+                  }}
+              >
+                  <option value="all" style={{ color: "black" }}>
+                      All
+                  </option>
 
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
+                  {categories.map((c) => (
+                      <option key={c} value={c} style={{ color: "black" }}>
+                          {c}
+                      </option>
+                  ))}
         </select>
 
       </div>
