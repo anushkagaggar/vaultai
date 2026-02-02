@@ -8,6 +8,10 @@ export default function Dashboard() {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [user, setUser] = useState<any>(null);
+  const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState("expense_date");
+  const [order, setOrder] = useState("desc");
+
 
   // ---------- LOGOUT ----------
   function logout() {
@@ -17,20 +21,19 @@ export default function Dashboard() {
 
   // ---------- LOAD DATA ----------
   async function load() {
-    try {
-      // Who am I
-      const me = await getMe();
-      setUser(me);
+  try {
+    const data = await getExpenses({
+      category: filter || undefined,
+      sort,
+      order,
+    });
 
-      // Expenses
-      const data = await getExpenses();
-      setExpenses(data);
-
-    } catch (err) {
-      console.error(err);
-      logout(); // fallback safety
-    }
+    setExpenses(data);
+  } catch {
+    alert("Session expired. Login again.");
   }
+}
+
 
   // ---------- ADD EXPENSE ----------
   async function add() {
@@ -95,6 +98,36 @@ export default function Dashboard() {
 
         <button onClick={add}>Add</button>
       </div>
+
+      <div style={{ marginTop: 20 }}>
+
+        <input
+            placeholder="Filter category"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+        />
+
+        <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+        >
+            <option value="expense_date">Date</option>
+            <option value="amount">Amount</option>
+            <option value="category">Category</option>
+        </select>
+
+        <select
+            value={order}
+            onChange={(e) => setOrder(e.target.value)}
+        >
+            <option value="desc">Desc</option>
+            <option value="asc">Asc</option>
+        </select>
+
+        <button onClick={load}>Apply</button>
+
+      </div>
+
 
       {/* LIST */}
       <h3 style={{ marginTop: 30 }}>Expenses</h3>

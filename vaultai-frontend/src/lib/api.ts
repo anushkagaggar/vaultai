@@ -23,7 +23,7 @@ export async function apiFetch(
 
   if (res.status === 401) {
   localStorage.removeItem("token");
-  window.location.href = "/login";
+  window.location.href = "/auth";
   return;}
 
   if (!res.ok) {
@@ -57,9 +57,22 @@ export async function loginUser(data: {
   });
 }
 
-export async function getExpenses() {
-  return apiFetch("/expenses");
+export async function getExpenses(params?: {
+  category?: string;
+  sort?: string;
+  order?: string;
+}) {
+  const query = new URLSearchParams();
+
+  if (params?.category) query.append("category", params.category);
+  if (params?.sort) query.append("sort", params.sort);
+  if (params?.order) query.append("order", params.order);
+
+  const qs = query.toString();
+
+  return apiFetch(`/expenses${qs ? `?${qs}` : ""}`);
 }
+
 
 export async function createExpense(data: {
   amount: number;
