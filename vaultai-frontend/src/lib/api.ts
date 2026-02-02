@@ -61,6 +61,8 @@ export async function getExpenses(params?: {
   category?: string;
   sort?: string;
   order?: string;
+  from_date?: string;
+  to_date?: string;
 }) {
   const query = new URLSearchParams();
 

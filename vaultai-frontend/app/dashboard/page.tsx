@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createExpense, getMe, getExpenses } from "@/lib/api";
 
 export default function Dashboard() {
+
   // ---------------- STATE ----------------
 
   const [amount, setAmount] = useState("");
@@ -17,15 +18,23 @@ export default function Dashboard() {
   const [user, setUser] = useState<any | null>(null);
 
   const [expenses, setExpenses] = useState<any[]>([]);
-  const [filterCategory, setFilterCategory] = useState("");
 
-  // ---------------- TABLE STYLES ----------------
+  // Filters (A1 + A2)
+
+  const [filterCategory, setFilterCategory] = useState("");
+  const [sortBy, setSortBy] = useState("expense_date");
+  const [order, setOrder] = useState("desc");
+
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  // ---------------- STYLES ----------------
 
   const thStyle = {
     border: "1px solid #555",
     padding: "10px",
-    textAlign: "left" as const,
     background: "#222",
+    textAlign: "left" as const,
   };
 
   const tdStyle = {
@@ -34,25 +43,29 @@ export default function Dashboard() {
     background: "#111",
   };
 
+  const inputStyle = {
+    padding: "8px",
+    background: "#111",
+    color: "white",
+    border: "1px solid #444",
+    borderRadius: "4px",
+  };
+
   // ---------------- EXTRA DATA ----------------
 
   function addExtra() {
     setExtras([...extras, { key: "", value: "" }]);
   }
 
-  function updateExtra(
-    index: number,
-    field: "key" | "value",
-    val: string
-  ) {
+  function updateExtra(i: number, field: "key" | "value", val: string) {
     const copy = [...extras];
-    copy[index][field] = val;
+    copy[i][field] = val;
     setExtras(copy);
   }
 
-  function removeExtra(index: number) {
+  function removeExtra(i: number) {
     const copy = [...extras];
-    copy.splice(index, 1);
+    copy.splice(i, 1);
     setExtras(copy);
   }
 
@@ -65,13 +78,30 @@ export default function Dashboard() {
 
   // ---------------- LOAD EXPENSES ----------------
 
-  async function loadExpenses(category?: string) {
+  async function loadExpenses() {
     try {
+
+      // A1: Do nothing unless user explicitly filters
+      if (!filterCategory) {
+        setExpenses([]);
+        return;
+      }
+
       const data = await getExpenses({
-        category: category || undefined,
+        category:
+          filterCategory === "all"
+            ? undefined
+            : filterCategory,
+
+        sort: sortBy,
+        order,
+
+        from_date: fromDate || undefined,
+        to_date: toDate || undefined,
       });
 
       setExpenses(data);
+
     } catch {
       alert("Failed to load expenses");
     }
@@ -81,6 +111,7 @@ export default function Dashboard() {
 
   async function add() {
     try {
+
       if (!amount || !category || !date) {
         alert("Fill required fields");
         return;
@@ -110,9 +141,9 @@ export default function Dashboard() {
       setDescription("");
       setExtras([]);
 
-      // Reload if filter active
+      // Reload only if filter active
       if (filterCategory) {
-        loadExpenses(filterCategory === "all" ? undefined : filterCategory);
+        loadExpenses();
       }
 
     } catch (err: any) {
@@ -123,6 +154,7 @@ export default function Dashboard() {
   // ---------------- AUTH ----------------
 
   useEffect(() => {
+
     const token = localStorage.getItem("token");
 
     if (!token) {
@@ -137,27 +169,23 @@ export default function Dashboard() {
         window.location.href = "/auth";
       });
 
-    // Load once for categories only
-    loadExpenses();
-
   }, []);
 
-  // ---------------- FILTER CHANGE ----------------
+  // ---------------- APPLY FILTER ----------------
 
-  useEffect(() => {
+  function applyFilters() {
+    loadExpenses();
+  }
 
-    if (!filterCategory) {
-      setExpenses([]);
-      return;
-    }
+  function resetFilters() {
 
-    if (filterCategory === "all") {
-      loadExpenses();
-    } else {
-      loadExpenses(filterCategory);
-    }
-
-  }, [filterCategory]);
+    setFilterCategory("");
+    setSortBy("expense_date");
+    setOrder("desc");
+    setFromDate("");
+    setToDate("");
+    setExpenses([]);
+  }
 
   // ---------------- UNIQUE CATEGORIES ----------------
 
@@ -171,6 +199,7 @@ export default function Dashboard() {
     <div style={{ padding: 40, color: "white" }}>
 
       {/* HEADER */}
+
       <div
         style={{
           display: "flex",
@@ -178,6 +207,7 @@ export default function Dashboard() {
         }}
       >
         <h2>Dashboard</h2>
+
         <button
           onClick={logout}
           style={{
@@ -192,35 +222,50 @@ export default function Dashboard() {
         </button>
       </div>
 
+
       {/* USER */}
+
       {user && (
         <p style={{ color: "#aaa" }}>
           Logged in as: {user.email}
         </p>
       )}
 
+
       {/* ADD FORM */}
-      <div style={{ marginTop: 25, display: "flex", gap: 10, flexWrap: "wrap" }}>
+
+      <div
+        style={{
+          marginTop: 25,
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
+        }}
+      >
 
         <input
+          style={inputStyle}
           placeholder="Amount"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
 
         <input
+          style={inputStyle}
           placeholder="Category"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
         />
 
         <input
+          style={inputStyle}
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
 
         <input
+          style={inputStyle}
           placeholder="Description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -228,15 +273,19 @@ export default function Dashboard() {
 
       </div>
 
-      {/* EXTRA */}
+
+      {/* EXTRA DATA */}
+
       <div style={{ marginTop: 15 }}>
 
         <h4>Extra Data</h4>
 
         {extras.map((ex, i) => (
+
           <div key={i} style={{ display: "flex", gap: 8 }}>
 
             <input
+              style={inputStyle}
               placeholder="Key"
               value={ex.key}
               onChange={(e) =>
@@ -245,6 +294,7 @@ export default function Dashboard() {
             />
 
             <input
+              style={inputStyle}
               placeholder="Value"
               value={ex.value}
               onChange={(e) =>
@@ -255,11 +305,13 @@ export default function Dashboard() {
             <button onClick={() => removeExtra(i)}>X</button>
 
           </div>
+
         ))}
 
         <button onClick={addExtra}>+</button>
 
       </div>
+
 
       <button
         style={{
@@ -276,12 +328,22 @@ export default function Dashboard() {
       </button>
 
 
-      {/* FILTER */}
-      <div style={{ marginTop: 30 }}>
+      {/* FILTER BAR (A1 + A2) */}
 
-        <label style={{ marginRight: 10 }}>
-          Filter:
-        </label>
+      <div
+        style={{
+          marginTop: 40,
+          padding: 15,
+          border: "1px solid #333",
+          background: "#0f0f0f",
+          display: "flex",
+          gap: 15,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+
+        {/* Category */}
 
         <select
           value={filterCategory}
@@ -290,7 +352,6 @@ export default function Dashboard() {
             background: "white",
             color: "black",
             padding: "6px",
-            borderRadius: "4px",
           }}
         >
           <option value="">Select</option>
@@ -301,12 +362,75 @@ export default function Dashboard() {
               {c}
             </option>
           ))}
+
         </select>
+
+
+        {/* Sort */}
+
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          style={{
+            background: "white",
+            color: "black",
+            padding: "6px",
+          }}
+        >
+          <option value="expense_date">Date</option>
+          <option value="amount">Amount</option>
+          <option value="category">Category</option>
+        </select>
+
+
+        {/* Order */}
+
+        <select
+          value={order}
+          onChange={(e) => setOrder(e.target.value)}
+          style={{
+            background: "white",
+            color: "black",
+            padding: "6px",
+          }}
+        >
+          <option value="desc">Desc</option>
+          <option value="asc">Asc</option>
+        </select>
+
+
+        {/* Dates */}
+
+        <input
+          type="date"
+          value={fromDate}
+          onChange={(e) => setFromDate(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          type="date"
+          value={toDate}
+          onChange={(e) => setToDate(e.target.value)}
+          style={inputStyle}
+        />
+
+
+        {/* Buttons */}
+
+        <button onClick={applyFilters}>
+          Apply
+        </button>
+
+        <button onClick={resetFilters}>
+          Reset
+        </button>
 
       </div>
 
 
       {/* EXPENSE LIST */}
+
       {expenses.length > 0 && (
 
         <div style={{ marginTop: 30 }}>
@@ -354,6 +478,7 @@ export default function Dashboard() {
 
 
       {/* LATEST */}
+
       {latest && (
 
         <div style={{ marginTop: 40 }}>
@@ -373,12 +498,13 @@ export default function Dashboard() {
                 <th style={thStyle}>Date</th>
                 <th style={thStyle}>Category</th>
                 <th style={thStyle}>Description</th>
-                <th style={thStyle}>Extra Data</th>
+                <th style={thStyle}>Extra</th>
               </tr>
             </thead>
 
             <tbody>
               <tr>
+
                 <td style={tdStyle}>{latest.amount}</td>
                 <td style={tdStyle}>{latest.expense_date}</td>
                 <td style={tdStyle}>{latest.category}</td>
@@ -389,6 +515,7 @@ export default function Dashboard() {
                     {JSON.stringify(latest.extra_data, null, 2)}
                   </pre>
                 </td>
+
               </tr>
             </tbody>
 
