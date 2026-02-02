@@ -16,15 +16,22 @@ from sqlalchemy import desc, asc
 
 @router.get("/", response_model=list[ExpenseOut])
 async def list_expenses(
-    skip: int = 0,
-    limit: int = 50,
-    sort: str = "expense_date",   # expense_date / amount / category
-    order: str = "desc",          # asc / desc
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, le=100),
+
+    # 🔹 Filters
+    category: str | None = Query(None),
+    from_date: date | None = Query(None),
+    to_date: date | None = Query(None),
+
+    # 🔹 Sorting
+    sort: str = Query("expense_date"),
+    order: str = Query("desc"),
+
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-
-    # Allowed fields (prevent SQL injection)
+    # ---- SAFE SORT MAP (ANTI SQL-INJECTION) ----
     sort_map = {
         "expense_date": Expense.expense_date,
         "amount": Expense.amount,
@@ -32,22 +39,35 @@ async def list_expenses(
     }
 
     if sort not in sort_map:
-        raise HTTPException(400, detail="Invalid sort field")
+        raise HTTPException(status_code=400, detail="Invalid sort field")
 
     sort_column = sort_map[sort]
-
     order_func = desc if order == "desc" else asc
 
+    # ---- BASE QUERY ----
+    query = select(Expense).where(
+        Expense.user_id == current_user.id
+    )
+
+    # ---- FILTERS ----
+    if category:
+        query = query.where(Expense.category == category)
+
+    if from_date:
+        query = query.where(Expense.expense_date >= from_date)
+
+    if to_date:
+        query = query.where(Expense.expense_date <= to_date)
+
+    # ---- SORT + PAGINATION ----
     query = (
-        select(Expense)
-        .where(Expense.user_id == current_user.id)
+        query
         .order_by(order_func(sort_column))
         .offset(skip)
         .limit(limit)
     )
 
     result = await db.execute(query)
-
     return result.scalars().all()
 
 
