@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { createExpense, getMe, getExpenses } from "@/lib/api";
 
 export default function Dashboard() {
-
   // ---------------- STATE ----------------
 
   const [amount, setAmount] = useState("");
@@ -12,9 +11,7 @@ export default function Dashboard() {
   const [date, setDate] = useState("");
   const [description, setDescription] = useState("");
 
-  const [extras, setExtras] = useState<
-    { key: string; value: string }[]
-  >([]);
+  const [extras, setExtras] = useState<{ key: string; value: string }[]>([]);
 
   const [latest, setLatest] = useState<any | null>(null);
   const [user, setUser] = useState<any | null>(null);
@@ -22,38 +19,19 @@ export default function Dashboard() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [filterCategory, setFilterCategory] = useState("");
 
-  // ---------------- STYLES ----------------
-
-  const inputStyle = {
-    background: "#111",
-    color: "white",
-    border: "1px solid #444",
-    padding: "8px",
-    borderRadius: "4px",
-  };
-
-  const buttonStyle = {
-    background: "#2563eb",
-    color: "white",
-    border: "none",
-    padding: "8px 14px",
-    borderRadius: "4px",
-    cursor: "pointer",
-  };
+  // ---------------- TABLE STYLES ----------------
 
   const thStyle = {
-    border: "1px solid #444",
+    border: "1px solid #555",
     padding: "10px",
     textAlign: "left" as const,
     background: "#222",
-    color: "white",
   };
 
   const tdStyle = {
-    border: "1px solid #444",
+    border: "1px solid #555",
     padding: "10px",
     background: "#111",
-    color: "white",
   };
 
   // ---------------- EXTRA DATA ----------------
@@ -87,14 +65,13 @@ export default function Dashboard() {
 
   // ---------------- LOAD EXPENSES ----------------
 
-  async function loadExpenses(selected: string) {
+  async function loadExpenses(category?: string) {
     try {
       const data = await getExpenses({
-        category: selected || undefined,
+        category: category || undefined,
       });
 
       setExpenses(data);
-
     } catch {
       alert("Failed to load expenses");
     }
@@ -104,7 +81,6 @@ export default function Dashboard() {
 
   async function add() {
     try {
-
       if (!amount || !category || !date) {
         alert("Fill required fields");
         return;
@@ -134,8 +110,9 @@ export default function Dashboard() {
       setDescription("");
       setExtras([]);
 
+      // Reload if filter active
       if (filterCategory) {
-        loadExpenses(filterCategory);
+        loadExpenses(filterCategory === "all" ? undefined : filterCategory);
       }
 
     } catch (err: any) {
@@ -146,7 +123,6 @@ export default function Dashboard() {
   // ---------------- AUTH ----------------
 
   useEffect(() => {
-
     const token = localStorage.getItem("token");
 
     if (!token) {
@@ -161,7 +137,27 @@ export default function Dashboard() {
         window.location.href = "/auth";
       });
 
+    // Load once for categories only
+    loadExpenses();
+
   }, []);
+
+  // ---------------- FILTER CHANGE ----------------
+
+  useEffect(() => {
+
+    if (!filterCategory) {
+      setExpenses([]);
+      return;
+    }
+
+    if (filterCategory === "all") {
+      loadExpenses();
+    } else {
+      loadExpenses(filterCategory);
+    }
+
+  }, [filterCategory]);
 
   // ---------------- UNIQUE CATEGORIES ----------------
 
@@ -169,42 +165,29 @@ export default function Dashboard() {
     new Set(expenses.map((e) => e.category))
   );
 
-  // ---------------- FILTER HANDLER ----------------
-
-  function handleFilterChange(value: string) {
-    setFilterCategory(value);
-
-    if (value === "") {
-      setExpenses([]);
-      return;
-    }
-
-    loadExpenses(value);
-  }
-
   // ---------------- UI ----------------
 
   return (
-    <div
-      style={{
-        padding: 40,
-        background: "#000",
-        minHeight: "100vh",
-        color: "white",
-      }}
-    >
+    <div style={{ padding: 40, color: "white" }}>
 
       {/* HEADER */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
         }}
       >
         <h2>Dashboard</h2>
-
-        <button style={buttonStyle} onClick={logout}>
+        <button
+          onClick={logout}
+          style={{
+            background: "#2563eb",
+            color: "white",
+            padding: "8px 14px",
+            borderRadius: "6px",
+            border: "none",
+          }}
+        >
           Logout
         </button>
       </div>
@@ -223,32 +206,27 @@ export default function Dashboard() {
           placeholder="Amount"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          style={inputStyle}
         />
 
         <input
           placeholder="Category"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          style={inputStyle}
         />
 
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          style={inputStyle}
         />
 
         <input
           placeholder="Description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          style={inputStyle}
         />
 
       </div>
-
 
       {/* EXTRA */}
       <div style={{ marginTop: 15 }}>
@@ -256,8 +234,7 @@ export default function Dashboard() {
         <h4>Extra Data</h4>
 
         {extras.map((ex, i) => (
-
-          <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+          <div key={i} style={{ display: "flex", gap: 8 }}>
 
             <input
               placeholder="Key"
@@ -265,7 +242,6 @@ export default function Dashboard() {
               onChange={(e) =>
                 updateExtra(i, "key", e.target.value)
               }
-              style={inputStyle}
             />
 
             <input
@@ -274,34 +250,26 @@ export default function Dashboard() {
               onChange={(e) =>
                 updateExtra(i, "value", e.target.value)
               }
-              style={inputStyle}
             />
 
-            <button
-              style={{
-                background: "#dc2626",
-                color: "white",
-                border: "none",
-                padding: "4px 8px",
-              }}
-              onClick={() => removeExtra(i)}
-            >
-              X
-            </button>
+            <button onClick={() => removeExtra(i)}>X</button>
 
           </div>
-
         ))}
 
-        <button style={buttonStyle} onClick={addExtra}>
-          +
-        </button>
+        <button onClick={addExtra}>+</button>
 
       </div>
 
-
       <button
-        style={{ ...buttonStyle, marginTop: 15 }}
+        style={{
+          marginTop: 15,
+          background: "#2563eb",
+          color: "white",
+          padding: "8px 16px",
+          borderRadius: "6px",
+          border: "none",
+        }}
         onClick={add}
       >
         Add Expense
@@ -309,7 +277,7 @@ export default function Dashboard() {
 
 
       {/* FILTER */}
-      <div style={{ marginTop: 35 }}>
+      <div style={{ marginTop: 30 }}>
 
         <label style={{ marginRight: 10 }}>
           Filter:
@@ -317,7 +285,7 @@ export default function Dashboard() {
 
         <select
           value={filterCategory}
-          onChange={(e) => handleFilterChange(e.target.value)}
+          onChange={(e) => setFilterCategory(e.target.value)}
           style={{
             background: "white",
             color: "black",
@@ -326,7 +294,6 @@ export default function Dashboard() {
           }}
         >
           <option value="">Select</option>
-
           <option value="all">All</option>
 
           {categories.map((c) => (
@@ -342,7 +309,7 @@ export default function Dashboard() {
       {/* EXPENSE LIST */}
       {expenses.length > 0 && (
 
-        <div style={{ marginTop: 35 }}>
+        <div style={{ marginTop: 30 }}>
 
           <h3>Expenses</h3>
 
@@ -371,9 +338,7 @@ export default function Dashboard() {
                   <td style={tdStyle}>{e.amount}</td>
                   <td style={tdStyle}>{e.expense_date}</td>
                   <td style={tdStyle}>{e.category}</td>
-                  <td style={tdStyle}>
-                    {e.description || "-"}
-                  </td>
+                  <td style={tdStyle}>{e.description || "-"}</td>
 
                 </tr>
 
@@ -395,15 +360,39 @@ export default function Dashboard() {
 
           <h3>Latest Expense</h3>
 
-          <pre
+          <table
             style={{
-              background: "#111",
-              padding: 15,
-              border: "1px solid #444",
+              width: "100%",
+              borderCollapse: "collapse",
             }}
           >
-            {JSON.stringify(latest, null, 2)}
-          </pre>
+
+            <thead>
+              <tr>
+                <th style={thStyle}>Amount</th>
+                <th style={thStyle}>Date</th>
+                <th style={thStyle}>Category</th>
+                <th style={thStyle}>Description</th>
+                <th style={thStyle}>Extra Data</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr>
+                <td style={tdStyle}>{latest.amount}</td>
+                <td style={tdStyle}>{latest.expense_date}</td>
+                <td style={tdStyle}>{latest.category}</td>
+                <td style={tdStyle}>{latest.description || "-"}</td>
+
+                <td style={tdStyle}>
+                  <pre style={{ margin: 0 }}>
+                    {JSON.stringify(latest.extra_data, null, 2)}
+                  </pre>
+                </td>
+              </tr>
+            </tbody>
+
+          </table>
 
         </div>
 
