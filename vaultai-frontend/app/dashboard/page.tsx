@@ -12,7 +12,7 @@ export default function Dashboard() {
   // ---------- LOGOUT ----------
   function logout() {
     localStorage.removeItem("token");
-    window.location.href = "/login";
+    window.location.href = "/auth";
   }
 
   // ---------- LOAD DATA ----------
@@ -55,7 +55,7 @@ export default function Dashboard() {
     const token = localStorage.getItem("token");
 
     if (!token) {
-      window.location.href = "/login";
+      window.location.href = "/auth";
       return;
     }
 
