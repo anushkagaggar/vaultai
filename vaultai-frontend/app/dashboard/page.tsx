@@ -18,6 +18,19 @@ export default function Dashboard() {
   const [latest, setLatest] = useState<any | null>(null);
   const [user, setUser] = useState<any | null>(null);
 
+  // ---------------- TABLE STYLES ----------------
+
+  const thStyle = {
+    border: "1px solid #666",
+    padding: "10px",
+    textAlign: "left" as const,
+  };
+
+  const tdStyle = {
+    border: "1px solid #666",
+    padding: "10px",
+    verticalAlign: "top" as const,
+  };
 
   // ---------------- EXTRA DATA ----------------
 
@@ -41,14 +54,12 @@ export default function Dashboard() {
     setExtras(copy);
   }
 
-
   // ---------------- LOGOUT ----------------
 
   function logout() {
     localStorage.removeItem("token");
     window.location.href = "/auth";
   }
-
 
   // ---------------- ADD EXPENSE ----------------
 
@@ -91,8 +102,7 @@ export default function Dashboard() {
     }
   }
 
-
-  // ---------------- ROUTE GUARD + VERIFY ----------------
+  // ---------------- AUTH CHECK ----------------
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -102,7 +112,7 @@ export default function Dashboard() {
       return;
     }
 
-    // Verify token + load user
+    // Verify token
     getMe()
       .then(setUser)
       .catch(() => {
@@ -111,7 +121,6 @@ export default function Dashboard() {
       });
 
   }, []);
-
 
   // ---------------- UI ----------------
 
@@ -130,14 +139,12 @@ export default function Dashboard() {
         <button onClick={logout}>Logout</button>
       </div>
 
-
       {/* USER INFO */}
       {user && (
         <p style={{ color: "gray" }}>
           Logged in as: {user.email}
         </p>
       )}
-
 
       {/* ADD FORM */}
       <div style={{ marginTop: 25 }}>
@@ -165,7 +172,6 @@ export default function Dashboard() {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
-
 
         {/* EXTRA DATA */}
         <div style={{ marginTop: 15 }}>
@@ -201,7 +207,6 @@ export default function Dashboard() {
 
         </div>
 
-
         <button
           style={{ marginTop: 15 }}
           onClick={add}
@@ -211,7 +216,6 @@ export default function Dashboard() {
 
       </div>
 
-
       {/* LATEST EXPENSE */}
       {latest && (
 
@@ -220,40 +224,38 @@ export default function Dashboard() {
           <h3>Latest Expense</h3>
 
           <table
-            border={1}
-            cellPadding={8}
-            style={{ borderCollapse: "collapse" }}
+            style={{
+              width: "100%",
+              marginTop: 15,
+              borderCollapse: "collapse",
+              border: "1px solid #666",
+              color: "white",
+            }}
           >
-
             <thead>
-              <tr>
-                <th>Amount</th>
-                <th>Date</th>
-                <th>Category</th>
-                <th>Description</th>
-                <th>Extra Data</th>
+              <tr style={{ backgroundColor: "#222" }}>
+                <th style={thStyle}>Amount</th>
+                <th style={thStyle}>Date</th>
+                <th style={thStyle}>Category</th>
+                <th style={thStyle}>Description</th>
+                <th style={thStyle}>Extra Data</th>
               </tr>
             </thead>
 
             <tbody>
-              <tr>
-                <td>{latest.amount}</td>
-                <td>{latest.expense_date}</td>
-                <td>{latest.category}</td>
-                <td>{latest.description || "-"}</td>
+              <tr style={{ backgroundColor: "#111" }}>
+                <td style={tdStyle}>{latest.amount}</td>
+                <td style={tdStyle}>{latest.expense_date}</td>
+                <td style={tdStyle}>{latest.category}</td>
+                <td style={tdStyle}>{latest.description || "-"}</td>
 
-                <td>
-                  <pre style={{ margin: 0 }}>
-                    {JSON.stringify(
-                      latest.extra_data,
-                      null,
-                      2
-                    )}
+                <td style={tdStyle}>
+                  <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+                    {JSON.stringify(latest.extra_data, null, 2)}
                   </pre>
                 </td>
               </tr>
             </tbody>
-
           </table>
 
         </div>
