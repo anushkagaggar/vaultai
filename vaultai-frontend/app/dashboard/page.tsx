@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createExpense, getMe, getExpenses } from "@/lib/api";
+import {
+  createExpense,
+  getMe,
+  getExpenses,
+  getExpenseStats,
+} from "@/lib/api";
 
 export default function Dashboard() {
 
@@ -30,6 +35,14 @@ export default function Dashboard() {
   const [toDate, setToDate] = useState("");
 
   const [sortCategory, setSortCategory] = useState("");
+
+  // -------- A3 --------
+
+  const [showStats, setShowStats] = useState(false);
+  const [statsFrom, setStatsFrom] = useState("");
+  const [statsTo, setStatsTo] = useState("");
+
+  const [stats, setStats] = useState<any | null>(null);
 
 
   // ---------------- STYLES ----------------
@@ -130,7 +143,7 @@ export default function Dashboard() {
       extra_data: extraObj,
     });
 
-    // ✅ ALWAYS SHOW IMMEDIATELY
+    // Show immediately
     setLatest(newExpense);
 
     setExpenses((prev) => [newExpense, ...prev]);
@@ -142,7 +155,6 @@ export default function Dashboard() {
     setExtras([]);
 
     await loadCategories();
-
   }
 
 
@@ -230,6 +242,25 @@ export default function Dashboard() {
     setSortCategory("");
 
     setExpenses([]);
+  }
+
+
+  // ---------------- A3 STATS ----------------
+
+  async function loadStats() {
+
+    try {
+
+      const data = await getExpenseStats(
+        statsFrom || undefined,
+        statsTo || undefined
+      );
+
+      setStats(data);
+
+    } catch {
+      alert("Failed to load stats");
+    }
   }
 
 
@@ -323,7 +354,7 @@ export default function Dashboard() {
       </button>
 
 
-      {/* FILTER */}
+      {/* FILTER (A1) */}
       <div style={{ marginTop: 30 }}>
 
         <label>Filter: </label>
@@ -344,7 +375,7 @@ export default function Dashboard() {
       </div>
 
 
-      {/* SORT */}
+      {/* SORT (A2) */}
       <div style={{ marginTop: 30, borderTop: "1px solid #444", paddingTop: 20 }}>
 
         <h3>Advanced Sort</h3>
@@ -408,12 +439,81 @@ export default function Dashboard() {
       </div>
 
 
+      {/* A3 STATS (COLLAPSED) */}
+      <div style={{ marginTop: 40, borderTop: "1px solid #444", paddingTop: 20 }}>
+
+        <button
+          onClick={() => setShowStats(!showStats)}
+          style={{
+            background: "#059669",
+            color: "white",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            border: "none",
+          }}
+        >
+          {showStats ? "Hide Stats" : "Show Stats"}
+        </button>
+
+
+        {showStats && (
+
+          <div style={{ marginTop: 20 }}>
+
+            <h3>Expense Insights</h3>
+
+            <div style={{ display: "flex", gap: 10 }}>
+
+              <input
+                type="date"
+                value={statsFrom}
+                onChange={(e) => setStatsFrom(e.target.value)}
+              />
+
+              <input
+                type="date"
+                value={statsTo}
+                onChange={(e) => setStatsTo(e.target.value)}
+              />
+
+              <button onClick={loadStats}>Get Stats</button>
+
+            </div>
+
+
+            {stats && (
+
+              <div style={{ marginTop: 20 }}>
+
+                <h4>Total: ₹ {stats.total}</h4>
+
+                <h4>By Category:</h4>
+
+                <ul>
+                  {Object.entries(stats.by_category).map(
+                    ([k, v]: any) => (
+                      <li key={k}>
+                        {k}: ₹ {v}
+                      </li>
+                    )
+                  )}
+                </ul>
+
+              </div>
+            )}
+
+          </div>
+        )}
+
+      </div>
+
+
       {/* LIST */}
       {expenses.length > 0 && (
 
         <div style={{ marginTop: 30 }}>
 
-          <h3>Expenses (Latest First)</h3>
+          <h3>Expenses</h3>
 
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
 

@@ -91,3 +91,16 @@ export async function createExpense(data: {
   });
 }
 
+export async function getExpenseStats(
+  from_date?: string,
+  to_date?: string
+) {
+  const query = new URLSearchParams();
+
+  if (from_date) query.append("from_date", from_date);
+  if (to_date) query.append("to_date", to_date);
+
+  const qs = query.toString();
+
+  return apiFetch(`/expenses/stats${qs ? `?${qs}` : ""}`);
+}
