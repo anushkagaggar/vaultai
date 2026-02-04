@@ -28,9 +28,16 @@ export async function apiFetch(
 
   if (!res.ok) {
   const text = await res.text();
-  throw new Error(text || res.statusText);}
+  throw new Error(text || res.statusText);
+}
 
-  return res.json();
+// Handle No Content (DELETE etc.)
+if (res.status === 204) {
+  return null;
+}
+
+return res.json();
+
 }
 
 export async function getMe() {
@@ -103,4 +110,29 @@ export async function getExpenseStats(
   const qs = query.toString();
 
   return apiFetch(`/expenses/stats${qs ? `?${qs}` : ""}`);
+}
+
+// UPDATE
+export async function updateExpense(
+  id: number,
+  data: {
+    amount?: number;
+    category?: string;
+    description?: string;
+    expense_date?: string;
+    extra_data?: Record<string, string>;
+  }
+) {
+  return apiFetch(`/expenses/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+
+// DELETE
+export async function deleteExpense(id: number) {
+  return apiFetch(`/expenses/${id}`, {
+    method: "DELETE",
+  });
 }

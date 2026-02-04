@@ -6,6 +6,8 @@ import {
   getMe,
   getExpenses,
   getExpenseStats,
+  updateExpense,
+  deleteExpense,
 } from "@/lib/api";
 
 export default function Dashboard() {
@@ -25,6 +27,8 @@ export default function Dashboard() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [filterCategory, setFilterCategory] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+
 
   // -------- A2 --------
 
@@ -135,18 +139,41 @@ export default function Dashboard() {
       }
     });
 
-    const newExpense = await createExpense({
-      amount: Number(amount),
-      category,
-      description,
-      expense_date: date,
-      extra_data: extraObj,
-    });
+    let newExpense;
+
+    if (editingId) {
+      newExpense = await updateExpense(editingId, {
+        amount: Number(amount),
+        category,
+        description,
+        expense_date: date,
+        extra_data: extraObj,
+      });
+
+      setEditingId(null);
+
+    } else {
+
+      newExpense = await createExpense({
+        amount: Number(amount),
+        category,
+        description,
+        expense_date: date,
+        extra_data: extraObj,
+      });
+
+    }
+
 
     // Show immediately
     setLatest(newExpense);
 
-    setExpenses((prev) => [newExpense, ...prev]);
+    // Reload list properly from backend
+    if (filterCategory === "all") {
+      await loadExpenses();
+    } else if (filterCategory) {
+      await loadExpenses({ category: filterCategory });
+    }
 
     setAmount("");
     setCategory("");
@@ -523,6 +550,7 @@ export default function Dashboard() {
                 <th style={thStyle}>Date</th>
                 <th style={thStyle}>Category</th>
                 <th style={thStyle}>Description</th>
+                <th style={thStyle}>Actions</th>
               </tr>
             </thead>
 
@@ -535,6 +563,47 @@ export default function Dashboard() {
                   <td style={tdStyle}>{e.expense_date}</td>
                   <td style={tdStyle}>{e.category}</td>
                   <td style={tdStyle}>{e.description || "-"}</td>
+                  <td style={tdStyle}>
+
+                    <button
+                      onClick={() => {
+                        setEditingId(e.id);
+
+                        setAmount(String(e.amount));
+                        setCategory(e.category);
+                        setDate(e.expense_date);
+                        setDescription(e.description || "");
+                        setExtras(
+                          e.extra_data
+                            ? Object.entries(e.extra_data).map(
+                                ([k, v]) => ({ key: k, value: String(v) })
+                              )
+                            : []
+                        );
+                      }}
+                    >
+                      Edit
+                    </button>
+
+
+                    <button
+                      style={{ marginLeft: 8, color: "red" }}
+                      onClick={async () => {
+
+                        if (!confirm("Delete this expense?")) return;
+
+                        await deleteExpense(e.id);
+
+                        setExpenses((prev) =>
+                          prev.filter((x) => x.id !== e.id)
+                        );
+                      }}
+                    >
+                      Delete
+                    </button>
+
+                  </td>
+
                 </tr>
 
               ))}
