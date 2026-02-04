@@ -16,22 +16,23 @@ from sqlalchemy import desc, asc
 
 @router.get("/", response_model=list[ExpenseOut])
 async def list_expenses(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, le=100),
 
-    # 🔹 Filters
-    category: str | None = Query(None),
+    skip: int = 0,
+    limit: int = 50,
+
+    category: str | None = None,
+
+    sort: str = "expense_date",
+    order: str = "desc",
+
     from_date: date | None = Query(None),
     to_date: date | None = Query(None),
-
-    # 🔹 Sorting
-    sort: str = Query("expense_date"),
-    order: str = Query("desc"),
 
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # ---- SAFE SORT MAP (ANTI SQL-INJECTION) ----
+
+    # Allowed fields (prevent SQL injection)
     sort_map = {
         "expense_date": Expense.expense_date,
         "amount": Expense.amount,
@@ -39,19 +40,26 @@ async def list_expenses(
     }
 
     if sort not in sort_map:
-        raise HTTPException(status_code=400, detail="Invalid sort field")
+        raise HTTPException(400, detail="Invalid sort field")
 
     sort_column = sort_map[sort]
     order_func = desc if order == "desc" else asc
 
-    # ---- BASE QUERY ----
+
+    # ---------------- BASE QUERY ----------------
+
     query = select(Expense).where(
         Expense.user_id == current_user.id
     )
 
-    # ---- FILTERS ----
+
+    # ---------------- CATEGORY FILTER ----------------
+
     if category:
         query = query.where(Expense.category == category)
+
+
+    # ---------------- DATE FILTER ----------------
 
     if from_date:
         query = query.where(Expense.expense_date >= from_date)
@@ -59,7 +67,9 @@ async def list_expenses(
     if to_date:
         query = query.where(Expense.expense_date <= to_date)
 
-    # ---- SORT + PAGINATION ----
+
+    # ---------------- SORT + PAGINATION ----------------
+
     query = (
         query
         .order_by(order_func(sort_column))
@@ -67,8 +77,11 @@ async def list_expenses(
         .limit(limit)
     )
 
+
     result = await db.execute(query)
+
     return result.scalars().all()
+
 
 
 @router.post(
