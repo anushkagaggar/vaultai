@@ -69,6 +69,8 @@ export async function getExpenses(params?: {
   if (params?.category) query.append("category", params.category);
   if (params?.sort) query.append("sort", params.sort);
   if (params?.order) query.append("order", params.order);
+  if (params?.from_date) query.append("from_date", params.from_date);
+  if (params?.to_date) query.append("to_date", params.to_date);
 
   const qs = query.toString();
 
