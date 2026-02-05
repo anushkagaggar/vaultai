@@ -19,6 +19,20 @@ This version focuses on reliability, security, and scalability fundamentals.
 
 ---
 
+---
+
+## 🌐 Live Project URL
+
+VaultAI v1.0.0 is deployed and accessible at:
+
+🔗 https://vaultaifrontend-czhf8ik0o-anushkas-projects-d6a64224.vercel.app/
+
+This frontend connects to the production backend and Neon database.
+
+All core features (auth, CRUD, session handling) are functional in the live environment.
+
+---
+
 ## 🎯 Version Roadmap
 
 VaultAI evolves in four stages:
@@ -243,9 +257,11 @@ Postgres is the source of truth.
 ---
 
 ## 📈 Current Status
-Release: v1.0.0
-Phase: Ledger Core
-Stability: Production-ready foundation
+Release: v1.0.0  
+Phase: Ledger Core  
+Deployment: Live (Vercel + Render + Neon)  
+Project URL: https://vaultaifrontend-czhf8ik0o-anushkas-projects-d6a64224.vercel.app/  
+Stability: Production-ready foundation  
 Next Milestone: V2 — Insight Engine
 
 ---
