@@ -1,6 +1,7 @@
 from datetime import date, timedelta
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 
 from app.models.expense import Expense
 
@@ -9,26 +10,30 @@ from app.models.expense import Expense
 # Rolling Averages
 # ----------------------------
 
-def rolling_averages(
-    db: Session,
+async def rolling_averages(
+    db: AsyncSession,
     user_id: int,
     today: date = date.today()
 ):
+
     windows = [30, 60, 90]
     result = {}
 
     for days in windows:
         start = today - timedelta(days=days)
 
-        avg_val = (
-            db.query(func.avg(Expense.amount))
-            .filter(
+        stmt = async_select_avg = (
+            select(func.avg(Expense.amount))
+            .where(
                 Expense.user_id == user_id,
                 Expense.expense_date >= start,
                 Expense.expense_date <= today
             )
-            .scalar()
         )
+
+        res = await db.execute(stmt)
+
+        avg_val = res.scalar()
 
         result[f"{days}_day_avg"] = round(avg_val or 0, 2)
 
@@ -39,34 +44,39 @@ def rolling_averages(
 # Month Comparison
 # ----------------------------
 
-def monthly_comparison(db: Session, user_id: int, today: date = date.today()):
+async def monthly_comparison(
+    db: AsyncSession,
+    user_id: int,
+    today: date = date.today()
+):
 
     current_start = today.replace(day=1)
 
     prev_end = current_start - timedelta(days=1)
     prev_start = prev_end.replace(day=1)
 
-    current_total = (
-        db.query(func.sum(Expense.amount))
-        .filter(
-            Expense.user_id == user_id,
-            Expense.expense_date >= current_start,
-            Expense.expense_date <= today
-        )
-        .scalar()
-        or 0
+
+    # Current
+    stmt1 = select(func.sum(Expense.amount)).where(
+        Expense.user_id == user_id,
+        Expense.expense_date >= current_start,
+        Expense.expense_date <= today
     )
 
-    prev_total = (
-        db.query(func.sum(Expense.amount))
-        .filter(
-            Expense.user_id == user_id,
-            Expense.expense_date >= prev_start,
-            Expense.expense_date <= prev_end
-        )
-        .scalar()
-        or 0
+    res1 = await db.execute(stmt1)
+    current_total = res1.scalar() or 0
+
+
+    # Previous
+    stmt2 = select(func.sum(Expense.amount)).where(
+        Expense.user_id == user_id,
+        Expense.expense_date >= prev_start,
+        Expense.expense_date <= prev_end
     )
+
+    res2 = await db.execute(stmt2)
+    prev_total = res2.scalar() or 0
+
 
     pct = None
 
@@ -75,6 +85,7 @@ def monthly_comparison(db: Session, user_id: int, today: date = date.today()):
             ((current_total - prev_total) / prev_total) * 100,
             2
         )
+
 
     return {
         "current_month": round(current_total, 2),
@@ -87,19 +98,26 @@ def monthly_comparison(db: Session, user_id: int, today: date = date.today()):
 # Category Totals
 # ----------------------------
 
-def top_categories(db: Session, user_id: int, limit: int = 5):
+async def top_categories(
+    db: AsyncSession,
+    user_id: int,
+    limit: int = 5
+):
 
-    rows = (
-        db.query(
+    stmt = (
+        select(
             Expense.category,
             func.sum(Expense.amount).label("total")
         )
-        .filter(Expense.user_id == user_id)
+        .where(Expense.user_id == user_id)
         .group_by(Expense.category)
         .order_by(func.sum(Expense.amount).desc())
         .limit(limit)
-        .all()
     )
+
+    res = await db.execute(stmt)
+
+    rows = res.all()
 
     return [
         {
@@ -109,15 +127,42 @@ def top_categories(db: Session, user_id: int, limit: int = 5):
         for r in rows
     ]
 
+# ----------------------------
+# Trend Classification
+# ----------------------------
+
+def classify_trend(monthly_data: dict):
+
+    pct = monthly_data.get("percent_change")
+
+    if pct is None:
+        return "insufficient_data"
+
+    if abs(pct) < 5:
+        return "stable"
+
+    if 5 <= pct < 50:
+        return "moderate_increase"
+
+    if pct >= 50:
+        return "spike"
+
+    if pct <= -20:
+        return "drop"
+
+    return "volatile"
 
 # ----------------------------
 # Main Generator
 # ----------------------------
 
-def build_trends_report(db: Session, user_id: int):
+async def build_trends_report(db: AsyncSession, user_id: int):
+
+    monthly = await monthly_comparison(db, user_id)
 
     return {
-        "rolling": rolling_averages(db, user_id),
-        "monthly": monthly_comparison(db, user_id),
-        "categories": top_categories(db, user_id)
+        "rolling": await rolling_averages(db, user_id),
+        "monthly": monthly,
+        "trend_type": classify_trend(monthly),
+        "categories": await top_categories(db, user_id)
     }

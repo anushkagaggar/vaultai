@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.services.insight_service import generate_trends_insight
@@ -10,12 +10,12 @@ router = APIRouter(prefix="/insights", tags=["Insights"])
 
 
 @router.get("/trends")
-def get_trends(
-    db: Session = Depends(get_db),
+async def get_trends(
+    db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user)
 ):
 
-    insight = generate_trends_insight(db, user.id)
+    insight = await generate_trends_insight(db, user.id)
 
     return {
         "id": insight.id,

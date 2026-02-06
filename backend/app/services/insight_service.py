@@ -1,7 +1,8 @@
 import hashlib
 import json
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.analytics.trends import build_trends_report
 from app.models.insight import Insight
@@ -12,18 +13,18 @@ from app.models.expense import Expense
 # Dataset Hash
 # -------------------------
 
-def compute_source_hash(db: Session, user_id: int):
+async def compute_source_hash(db: AsyncSession, user_id: int):
 
-    rows = (
-        db.query(
-            Expense.id,
-            Expense.amount,
-            Expense.category,
-            Expense.expense_date
-        )
-        .filter(Expense.user_id == user_id)
-        .all()
-    )
+    stmt = select(
+        Expense.id,
+        Expense.amount,
+        Expense.category,
+        Expense.expense_date
+    ).where(Expense.user_id == user_id)
+
+    result = await db.execute(stmt)
+
+    rows = result.all()
 
     payload = [
         {
@@ -44,30 +45,30 @@ def compute_source_hash(db: Session, user_id: int):
 # Main Generator
 # -------------------------
 
-def generate_trends_insight(db: Session, user_id: int):
+async def generate_trends_insight(db: AsyncSession, user_id: int):
 
-    source_hash = compute_source_hash(db, user_id)
+    source_hash = await compute_source_hash(db, user_id)
 
     # Check cache
-    cached = (
-        db.query(Insight)
-        .filter(
-            Insight.user_id == user_id,
-            Insight.type == "trends",
-            Insight.source_hash == source_hash
-        )
-        .first()
+    stmt = select(Insight).where(
+        Insight.user_id == user_id,
+        Insight.type == "trends",
+        Insight.source_hash == source_hash
     )
+
+    result = await db.execute(stmt)
+
+    cached = result.scalars().first()
 
     if cached:
         return cached
 
 
     # Run analytics
-    metrics = build_trends_report(db, user_id)
+    metrics = await build_trends_report(db, user_id)
 
 
-    # Simple summary (LLM later)
+    # Temp summary (LLM later)
     summary = "Monthly and rolling expense trends generated."
 
 
@@ -81,7 +82,7 @@ def generate_trends_insight(db: Session, user_id: int):
     )
 
     db.add(insight)
-    db.commit()
-    db.refresh(insight)
+    await db.commit()
+    await db.refresh(insight)
 
     return insight
