@@ -7,7 +7,8 @@ from sqlalchemy import select
 from app.analytics.trends import build_trends_report
 from app.models.insight import Insight
 from app.models.expense import Expense
-
+from app.llm.client import generate_explanation
+from app.insights.validator import validate_explanation
 
 # -------------------------
 # Dataset Hash
@@ -67,15 +68,42 @@ async def generate_trends_insight(db: AsyncSession, user_id: int):
     # Run analytics
     metrics = await build_trends_report(db, user_id)
 
+    # Build prompt
+    prompt = f"""
+    You are given verified financial metrics.
 
-    # Temp summary (LLM later)
-    summary = "Monthly and rolling expense trends generated."
+    Rolling averages:
+    {metrics['rolling']}
+
+    Monthly comparison:
+    {metrics['monthly']}
+
+    Top categories:
+    {metrics['categories']}
+
+    Trend type:
+    {metrics['trend_type']}
+
+    Write a short, factual explanation.
+    Do NOT invent numbers.
+    Do NOT give advice.
+    """
+
+    # Call LLM
+    explanation = await generate_explanation(prompt)
+
+
+    # Validate output
+    is_valid = validate_explanation(explanation, metrics)
+
+    if not is_valid:
+        explanation = "Trends detected, but explanation could not be safely generated."
 
 
     insight = Insight(
         user_id=user_id,
         type="trends",
-        summary=summary,
+        summary=explanation,
         metrics=metrics,
         confidence=0.8,
         source_hash=source_hash
