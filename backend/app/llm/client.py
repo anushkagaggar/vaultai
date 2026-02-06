@@ -1,7 +1,7 @@
 from app.config import settings
 import openai
 
-openai.api_key = settings.openai_api_key
+openai.api_key = settings.OPENAI_API_KEY
 
 async def generate_explanation(prompt: str) -> str:
 
