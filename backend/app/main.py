@@ -14,10 +14,12 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import logging
 from app.middleware.logging import log_requests
+from app.routes import insights
 
 app = FastAPI()
 app.include_router(auth.router)
 app.include_router(expenses.router)
+app.include_router(insights.router)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)

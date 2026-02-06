@@ -5,88 +5,90 @@ from sqlalchemy import func
 from app.models.expense import Expense
 
 
-# ---------------------------
+# ----------------------------
 # Rolling Averages
-# ---------------------------
+# ----------------------------
 
-def get_rolling_means(
+def rolling_averages(
     db: Session,
     user_id: int,
     today: date = date.today()
 ):
     windows = [30, 60, 90]
-    results = {}
+    result = {}
 
     for days in windows:
-        start_date = today - timedelta(days=days)
+        start = today - timedelta(days=days)
 
-        avg_amount = (
+        avg_val = (
             db.query(func.avg(Expense.amount))
             .filter(
                 Expense.user_id == user_id,
-                Expense.expense_date >= start_date,
+                Expense.expense_date >= start,
                 Expense.expense_date <= today
             )
             .scalar()
         )
 
-        results[f"{days}_day_avg"] = round(avg_amount or 0, 2)
+        result[f"{days}_day_avg"] = round(avg_val or 0, 2)
 
-    return results
+    return result
 
 
-# ---------------------------
-# Month over Month Change
-# ---------------------------
+# ----------------------------
+# Month Comparison
+# ----------------------------
 
-def get_monthly_change(db: Session, user_id: int, today: date = date.today()):
-    this_month_start = today.replace(day=1)
+def monthly_comparison(db: Session, user_id: int, today: date = date.today()):
 
-    last_month_end = this_month_start - timedelta(days=1)
-    last_month_start = last_month_end.replace(day=1)
+    current_start = today.replace(day=1)
 
-    this_month_sum = (
+    prev_end = current_start - timedelta(days=1)
+    prev_start = prev_end.replace(day=1)
+
+    current_total = (
         db.query(func.sum(Expense.amount))
         .filter(
             Expense.user_id == user_id,
-            Expense.expense_date >= this_month_start,
+            Expense.expense_date >= current_start,
             Expense.expense_date <= today
         )
         .scalar()
         or 0
     )
 
-    last_month_sum = (
+    prev_total = (
         db.query(func.sum(Expense.amount))
         .filter(
             Expense.user_id == user_id,
-            Expense.expense_date >= last_month_start,
-            Expense.expense_date <= last_month_end
+            Expense.expense_date >= prev_start,
+            Expense.expense_date <= prev_end
         )
         .scalar()
         or 0
     )
 
-    if last_month_sum == 0:
-        pct_change = None
-    else:
-        pct_change = round(
-            ((this_month_sum - last_month_sum) / last_month_sum) * 100,
+    pct = None
+
+    if prev_total > 0:
+        pct = round(
+            ((current_total - prev_total) / prev_total) * 100,
             2
         )
 
     return {
-        "this_month": round(this_month_sum, 2),
-        "last_month": round(last_month_sum, 2),
-        "pct_change": pct_change
+        "current_month": round(current_total, 2),
+        "previous_month": round(prev_total, 2),
+        "percent_change": pct
     }
 
 
-# ---------------------------
-# Category Trends
-# ---------------------------
+# ----------------------------
+# Category Totals
+# ----------------------------
 
-def get_category_trends(db: Session, user_id: int, limit: int = 5):
+def top_categories(db: Session, user_id: int, limit: int = 5):
+
     rows = (
         db.query(
             Expense.category,
@@ -108,13 +110,14 @@ def get_category_trends(db: Session, user_id: int, limit: int = 5):
     ]
 
 
-# ---------------------------
-# Unified Trends Report
-# ---------------------------
+# ----------------------------
+# Main Generator
+# ----------------------------
 
-def generate_trends_report(db: Session, user_id: int):
+def build_trends_report(db: Session, user_id: int):
+
     return {
-        "rolling_means": get_rolling_means(db, user_id),
-        "monthly_change": get_monthly_change(db, user_id),
-        "category_trends": get_category_trends(db, user_id)
+        "rolling": rolling_averages(db, user_id),
+        "monthly": monthly_comparison(db, user_id),
+        "categories": top_categories(db, user_id)
     }
