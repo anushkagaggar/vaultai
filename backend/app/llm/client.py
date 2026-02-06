@@ -1,7 +1,7 @@
-import os
+from app.config import settings
 import openai
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = settings.openai_api_key
 
 async def generate_explanation(prompt: str) -> str:
 
