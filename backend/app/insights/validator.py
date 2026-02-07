@@ -1,4 +1,6 @@
 import re
+import math
+
 
 FORBIDDEN_WORDS = [
     "invest",
@@ -8,6 +10,91 @@ FORBIDDEN_WORDS = [
     "guarantee",
     "profit"
 ]
+
+
+# ----------------------------
+# Number Extraction
+# ----------------------------
+
+def extract_numbers(text: str):
+    """
+    Extract numeric values but ignore window indicators
+    like 30 days, 90 days, etc.
+    """
+
+    raw = re.findall(r"\d+\.?\d*", text)
+
+    nums = []
+
+    for x in raw:
+
+        val = float(x)
+
+        # Ignore small integers (likely days/windows)
+        if val.is_integer() and val < 100:
+            continue
+
+        nums.append(val)
+
+    return nums
+
+
+# ----------------------------
+# Metric Collection
+# ----------------------------
+
+def collect_metric_numbers(metrics: dict):
+    """
+    Collect all numeric values from metrics as floats.
+    """
+
+    nums = []
+
+    # Rolling averages
+    for v in metrics["rolling"].values():
+        nums.append(float(v))
+
+    # Monthly metrics
+    for v in metrics["monthly"].values():
+        if v is not None:
+            nums.append(float(v))
+
+    # Category totals
+    for c in metrics["categories"]:
+        nums.append(float(c["total"]))
+
+    return nums
+
+
+# ----------------------------
+# Numeric Validator
+# ----------------------------
+
+def validate_numbers(text: str, metrics: dict) -> bool:
+
+    found = extract_numbers(text)
+    expected = collect_metric_numbers(metrics)
+
+    for f in found:
+
+        matched = False
+
+        for e in expected:
+
+            # Relative + absolute tolerance
+            if math.isclose(f, e, rel_tol=0.01, abs_tol=0.5):
+                matched = True
+                break
+
+        if not matched:
+            return False
+
+    return True
+
+
+# ----------------------------
+# Main Validator
+# ----------------------------
 
 def validate_explanation(text: str, metrics: dict) -> bool:
 
@@ -19,25 +106,9 @@ def validate_explanation(text: str, metrics: dict) -> bool:
             return False
 
 
-    # 2. Check numbers match metrics
-    numbers = re.findall(r"\d+\.?\d*", text)
+    # 2. Validate numbers
+    if not validate_numbers(text, metrics):
+        return False
 
-    valid_numbers = []
-
-    # collect all known numbers
-    for v in metrics["rolling"].values():
-        valid_numbers.append(str(v))
-
-    for v in metrics["monthly"].values():
-        if v is not None:
-            valid_numbers.append(str(v))
-
-    for cat in metrics["categories"]:
-        valid_numbers.append(str(cat["total"]))
-
-
-    for n in numbers:
-        if n not in valid_numbers:
-            return False
 
     return True

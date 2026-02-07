@@ -72,6 +72,8 @@ async def generate_trends_insight(db: AsyncSession, user_id: int):
     prompt = f"""
     You are given verified financial metrics.
 
+    You MUST use only these numbers.
+
     Rolling averages:
     {metrics['rolling']}
 
@@ -84,20 +86,24 @@ async def generate_trends_insight(db: AsyncSession, user_id: int):
     Trend type:
     {metrics['trend_type']}
 
-    Write a short, factual explanation.
-    Do NOT invent numbers.
-    Do NOT give advice.
+    Rules:
+    - Do NOT round numbers
+    - Do NOT estimate
+    - Do NOT rephrase percentages
+    - Copy numbers exactly
+    - No advice
+
+    Write a 3–4 sentence explanation.
     """
 
     # Call LLM
     explanation = await generate_explanation(prompt)
 
-
     # Validate output
     is_valid = validate_explanation(explanation, metrics)
 
     if not is_valid:
-        explanation = "Trends detected, but explanation could not be safely generated."
+        explanation = "NA"
 
 
     insight = Insight(
