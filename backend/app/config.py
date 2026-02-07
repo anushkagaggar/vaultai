@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     SYNC_DATABASE_URL: str
     TEST_DATABASE_URL: str | None = None
-    OPENAI_API_KEY: str
 
 
     model_config = SettingsConfigDict(

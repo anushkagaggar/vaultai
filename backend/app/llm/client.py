@@ -1,23 +1,21 @@
-from app.config import settings
-import openai
+import httpx
 
-openai.api_key = settings.OPENAI_API_KEY
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODEL_NAME = "llama3:8b"
 
 async def generate_explanation(prompt: str) -> str:
 
-    response = await openai.ChatCompletion.acreate(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a financial data explainer. Do not invent numbers."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0.2
-    )
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": prompt,
+        "stream": False
+    }
 
-    return response.choices[0].message.content.strip()
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(OLLAMA_URL, json=payload)
+
+        resp.raise_for_status()
+
+        data = resp.json()
+
+        return data["response"].strip()
