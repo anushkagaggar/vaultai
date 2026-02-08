@@ -13,6 +13,8 @@ from app.middleware.errors import (
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import logging
+from app.vectordb.qdrant_client import init_collection
+
 from app.middleware.logging import log_requests
 from app.routes import insights
 
@@ -43,6 +45,9 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 
+@app.lifespan("startup")
+async def startup_event():
+    init_collection()
 
 @app.get("/health")
 def health():
