@@ -45,7 +45,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 
-@app.lifespan("startup")
+@app.on_event("startup")
 async def startup_event():
     init_collection()
 
