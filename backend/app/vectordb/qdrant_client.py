@@ -100,3 +100,28 @@ def search_chunks(
     )
 
     return results
+
+# --------------------------
+# Batch Insert
+# --------------------------
+
+def insert_chunks_batch(vectors, payloads):
+
+    client = get_qdrant_client()
+
+    points = []
+
+    for v, p in zip(vectors, payloads):
+
+        points.append(
+            PointStruct(
+                id=str(uuid.uuid4()),
+                vector=v,
+                payload=p
+            )
+        )
+
+    client.upsert(
+        collection_name=COLLECTION_NAME,
+        points=points
+    )

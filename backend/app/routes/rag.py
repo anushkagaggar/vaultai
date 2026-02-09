@@ -7,6 +7,7 @@ from app.vectordb.qdrant_client import insert_chunk, search_chunks
 from app.middleware.auth import get_current_user
 from app.models.rag_document import RagDocument
 from app.database import get_db
+from app.rag.indexer import index_document
 
 import os
 import hashlib
@@ -110,11 +111,23 @@ async def upload_doc(
 
     db.add(doc)
     await db.commit()
-    await db.refresh(doc) 
+    await db.refresh(doc)
+
+    file_path = path
+
+    chunks = index_document(
+        file_path=file_path,
+        user_id=user.id,
+        doc_id=doc.id,
+        version=version,
+        trust=trust,
+        filename=file.filename
+    ) 
 
     return {
         "doc_id": doc.id,
         "filename": file.filename,
         "version": version,
-        "trust": trust
+        "trust": trust,
+        "chunks_indexed": chunks
     }
