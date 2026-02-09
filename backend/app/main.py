@@ -14,6 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import logging
 from app.vectordb.qdrant_client import init_collection
+from app.routes import rag
 
 from app.middleware.logging import log_requests
 from app.routes import insights
@@ -48,6 +49,8 @@ logging.basicConfig(
 @app.on_event("startup")
 async def startup_event():
     init_collection()
+
+app.include_router(rag.router)
 
 @app.get("/health")
 def health():

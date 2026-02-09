@@ -1,5 +1,14 @@
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.http.models import (
+    Distance,
+    VectorParams,
+    Filter,
+    FieldCondition,
+    MatchValue,
+    PointStruct,
+)
+
+import uuid
 
 
 QDRANT_HOST = "localhost"
@@ -10,11 +19,9 @@ VECTOR_SIZE = 384
 
 
 def get_qdrant_client():
-
     return QdrantClient(
-        host=QDRANT_HOST,
-        port=QDRANT_PORT
-    )
+    url=f"http://{QDRANT_HOST}:{QDRANT_PORT}"
+)
 
 
 def init_collection():
@@ -27,7 +34,6 @@ def init_collection():
     if COLLECTION_NAME in names:
         return
 
-
     client.create_collection(
         collection_name=COLLECTION_NAME,
 
@@ -36,3 +42,61 @@ def init_collection():
             distance=Distance.COSINE
         )
     )
+
+
+# --------------------------
+# Insert Vector
+# --------------------------
+
+def insert_chunk(
+    vector: list[float],
+    payload: dict
+):
+
+    client = get_qdrant_client()
+
+    point = PointStruct(
+        id=str(uuid.uuid4()),
+        vector=vector,
+        payload=payload
+    )
+
+    client.upsert(
+        collection_name=COLLECTION_NAME,
+        points=[point]
+    )
+
+
+# --------------------------
+# Search Vectors
+# --------------------------
+
+def search_chunks(
+    vector: list[float],
+    user_id: int,
+    limit: int = 5
+):
+
+    client = get_qdrant_client()
+
+    search_filter = Filter(
+        must=[
+            FieldCondition(
+                key="user_id",
+                match=MatchValue(value=user_id)
+            ),
+            FieldCondition(
+                key="active",
+                match=MatchValue(value=True)
+            )
+        ]
+    )
+
+    results = client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=vector,
+        query_filter=search_filter,
+        limit=limit
+    )
+
+    return results
