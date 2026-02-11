@@ -20,6 +20,9 @@ class InsightRunner:
 
     async def run(self, db: AsyncSession, user_id: int, insight_type: str):
         execution = await self._acquire_lock(db, user_id, insight_type)
+        if execution is None:
+            raise RuntimeError("Execution lock acquisition failed")
+
         try:
 
             await self._set_state(db, execution, State.RUNNING)
@@ -90,7 +93,13 @@ class InsightRunner:
             )
 
             result = await db.execute(stmt)
-            return result.scalar_one_or_none()
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                return existing
+
+            # No active execution found → retry insert
+            raise RuntimeError("Failed to acquire execution lock")
 
 
     async def _set_state(self, db, execution, state):
