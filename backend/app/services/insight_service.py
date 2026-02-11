@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,13 +10,12 @@ from app.models.insight import Insight
 from app.models.expense import Expense
 from app.llm.client import generate_explanation
 from app.insights.validator import validate_explanation
+from app.rag.retriever import retrieve_context
 
-# -------------------------
-# Dataset Hash
-# -------------------------
+logger = logging.getLogger(__name__)
+
 
 async def compute_source_hash(db: AsyncSession, user_id: int):
-
     stmt = select(
         Expense.id,
         Expense.amount,
@@ -24,7 +24,6 @@ async def compute_source_hash(db: AsyncSession, user_id: int):
     ).where(Expense.user_id == user_id)
 
     result = await db.execute(stmt)
-
     rows = result.all()
 
     payload = [
@@ -38,16 +37,10 @@ async def compute_source_hash(db: AsyncSession, user_id: int):
     ]
 
     raw = json.dumps(payload, sort_keys=True)
-
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-# -------------------------
-# Main Generator
-# -------------------------
-
 async def generate_trends_insight(db: AsyncSession, user_id: int):
-
     source_hash = await compute_source_hash(db, user_id)
 
     # Check cache
@@ -58,53 +51,74 @@ async def generate_trends_insight(db: AsyncSession, user_id: int):
     )
 
     result = await db.execute(stmt)
-
     cached = result.scalars().first()
 
     if cached:
         return cached
 
-
     # Run analytics
     metrics = await build_trends_report(db, user_id)
 
-    # Build prompt
+    # Retrieve RAG context
+    rag_context = retrieve_context(
+        query="user financial documents",
+        user_id=user_id
+    )
+
+    rag_text = "\n\n".join(rag_context[:1])[:500]
+
     prompt = f"""
-    You are given verified financial metrics.
+You are generating a financial insight.
 
-    You MUST use only these numbers.
+STRICT RULES:
+- Write EXACTLY 2 sentences
+- Use ONLY numbers from the data below
+- DO NOT add analysis, reports, or extra instructions
+- DO NOT mention user IDs, document entries, or categories not in the data
+- Stop after 2 sentences
 
-    Rolling averages:
-    {metrics['rolling']}
+Approved data:
 
-    Monthly comparison:
-    {metrics['monthly']}
+Rolling averages:
+30d={metrics['rolling']['30_day_avg']}
+60d={metrics['rolling']['60_day_avg']}
+90d={metrics['rolling']['90_day_avg']}
 
-    Top categories:
-    {metrics['categories']}
+Monthly:
+current={metrics['monthly']['current_month']}
+previous={metrics['monthly']['previous_month']}
+change={metrics['monthly']['percent_change']}
 
-    Trend type:
-    {metrics['trend_type']}
+Categories:
+{metrics['categories']}
 
-    Rules:
-    - Do NOT round numbers
-    - Do NOT estimate
-    - Do NOT rephrase percentages
-    - Copy numbers exactly
-    - No advice
+Documents:
+{rag_text}
 
-    Write a 3–4 sentence explanation.
-    """
+Write exactly 2 sentences summarizing the spending trends.
+"""
 
     # Call LLM
+    # In insight_service.py, after generate_explanation:
     explanation = await generate_explanation(prompt)
 
-    # Validate output
-    is_valid = validate_explanation(explanation, metrics)
+    # Clean up the response - take only first 2 sentences or up to separator
+    if "-----" in explanation or "---" in explanation:
+        explanation = explanation.split("-----")[0].split("---")[0].strip()
+
+    # Or limit to first 2 sentences
+    sentences = explanation.split('. ')
+    if len(sentences) > 2:
+        explanation = '. '.join(sentences[:2]) + '.'
+
+    logger.info(f"LLM generated explanation: {explanation[:200]}...")
+
+    # Validate output - PASS RAG CONTEXT TOO
+    is_valid = validate_explanation(explanation, metrics, rag_text)
 
     if not is_valid:
-        explanation = "NA"
-
+        logger.warning("Validation failed, using fallback")
+        explanation = "Explanation suppressed due to unsupported claims."
 
     insight = Insight(
         user_id=user_id,

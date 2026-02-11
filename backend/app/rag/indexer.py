@@ -15,6 +15,10 @@ def index_document(
 
     # 1. Parse
     text = parse_file(file_path)
+    print("---- PARSED TEXT ----")
+    print(text[:1000])
+    print("---------------------")
+
 
     if not text.strip():
         return 0
@@ -34,15 +38,16 @@ def index_document(
     for i, chunk in enumerate(chunks):
 
         payloads.append({
-            "user_id": user_id,
-            "doc_id": doc_id,
-            "version": version,
-            "trust": trust,
+            "user_id": int(user_id),
+            "doc_id": int(doc_id),
+            "version": int(version),
+            "trust": float(trust),
             "active": True,
-            "filename": filename,
-            "chunk_index": i,
+            "filename": str(filename),
+            "chunk_index": int(i),
             "text": chunk
         })
+
 
 
     # 5. Store

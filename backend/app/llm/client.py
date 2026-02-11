@@ -1,7 +1,9 @@
 import httpx
 
+
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "llama3:8b"
+MODEL_NAME = "phi3:mini"
+
 
 async def generate_explanation(prompt: str) -> str:
 
@@ -11,8 +13,20 @@ async def generate_explanation(prompt: str) -> str:
         "stream": False
     }
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(OLLAMA_URL, json=payload)
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    async with httpx.AsyncClient(timeout=180) as client:
+
+        resp = await client.post(
+            OLLAMA_URL,
+            json=payload,
+            headers=headers
+        )
+
+        print("LLM STATUS:", resp.status_code)
+        print("LLM RAW:", resp.text)
 
         resp.raise_for_status()
 

@@ -8,6 +8,7 @@ from app.middleware.auth import get_current_user
 from app.models.rag_document import RagDocument
 from app.database import get_db
 from app.rag.indexer import index_document
+from app.rag.retriever import retrieve_context
 
 import os
 import hashlib
@@ -130,4 +131,18 @@ async def upload_doc(
         "version": version,
         "trust": trust,
         "chunks_indexed": chunks
+    }
+
+
+@router.get("/debug-retrieve")
+def debug_retrieve(
+    q: str,
+    user=Depends(get_current_user)
+):
+
+    ctx = retrieve_context(q, user.id)
+
+    return {
+        "query": q,
+        "results": ctx
     }
