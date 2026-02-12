@@ -1,7 +1,7 @@
 from app.rag.embedder import embed_texts
 from app.vectordb.qdrant_client import search_chunks
 
-def retrieve_context(
+async def retrieve_context(
     query: str,
     user_id: int,
     limit: int = 5

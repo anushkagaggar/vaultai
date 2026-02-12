@@ -15,10 +15,12 @@ async def get_trends(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-
-    result = await runner.run(db, user.id, "trends")
+    execution, result = await runner.run(db, user.id, "trends")
 
     return {
-        "status": "started",
-        "result": result
+        "execution_id": execution.id,
+        "status": execution.status,
+        "insight_type": execution.insight_type,
+        "data": result,
+        "created_at": execution.started_at.isoformat() if execution.started_at else None,
     }

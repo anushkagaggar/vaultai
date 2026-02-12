@@ -18,11 +18,7 @@ class RagDocument(Base):
 
     id = Column(Integer, primary_key=True)
 
-    user_id = Column(
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False
-    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     filename = Column(String(255), nullable=False)
 
@@ -30,8 +26,8 @@ class RagDocument(Base):
 
     trust_level = Column(Float, nullable=False)
 
-    hash = Column(String(128), nullable=False)
-
+    content_hash = Column(String(128), nullable=False)   # NEW
     active = Column(Boolean, default=True)
 
     uploaded_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())  # NEW
