@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.orchestrator import InsightRunner
+from app.orchestrator.state import State  # ✅ Import State
 
 router = APIRouter(prefix="/insights", tags=["Insights"])
 runner = InsightRunner()
@@ -15,21 +16,23 @@ async def start_trends(
 ):
     execution, result = await runner.run(db, user.id, "trends")
 
-    # If reusable finished execution exists (cached)
-    if execution.status == "success":
+    # Cached success (terminal immediately)
+    if execution.status == State.SUCCESS:
         return {
-            "status": "ready",
             "execution_id": execution.id,
+            "status": "success",
+            "is_terminal": True,  # ✅ No polling needed
             "cached": True,
-            "data": {
+            "result": {
                 "metrics": result["metrics"],
                 "explanation": result["explanation"],
             }
         }
 
-    # Job created (new execution)
+    # Job created (non-terminal, needs polling)
     return {
-        "status": execution.status,  # ✅ Changed from execution.status
         "execution_id": execution.id,
+        "status": "accepted",
+        "is_terminal": False,  # ✅ Client should poll
         "cached": False,
     }

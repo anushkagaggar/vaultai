@@ -6,6 +6,7 @@ from app.database import get_db
 from app.models.execution import InsightExecution
 from app.middleware.auth import get_current_user
 from app.models.user import User
+from app.orchestrator.state import State  
 
 router = APIRouter(prefix="/executions", tags=["executions"])
 
@@ -28,49 +29,62 @@ async def get_execution(
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
 
-    # ✅ PENDING or LOCKED
-    if execution.status in ("pending", "locked"):
+    # ✅ Compute terminal flag
+    is_terminal = State.is_terminal(execution.status)
+
+    # =====================================
+    # NON-TERMINAL STATES
+    # =====================================
+    
+    # PENDING or LOCKED
+    if execution.status in (State.PENDING, State.LOCKED):
         return {
+            "execution_id": execution.id,
             "status": execution.status,
-            "execution_id": execution.id,
+            "is_terminal": False,  # ✅ Explicit contract
         }
 
-    # ✅ RUNNING
-    if execution.status == "running":
+    # RUNNING
+    if execution.status == State.RUNNING:
         return {
-            "status": "running"
+            "execution_id": execution.id,
+            "status": "running",
+            "is_terminal": False,  # ✅ Explicit contract
         }
 
-    # ✅ SUCCESS
-    if execution.status == "success":
+    # =====================================
+    # TERMINAL STATES
+    # =====================================
+    
+    # SUCCESS
+    if execution.status == State.SUCCESS:
         return {
-            "status": "ready",
             "execution_id": execution.id,
-            "cached": True,
-            "rag_context": execution.rag_snapshot,
-            "data": {
+            "status": "success",
+            "is_terminal": True,  # ✅ Polling can stop
+            "result": {
                 "metrics": execution.analytics_snapshot,
                 "explanation": execution.llm_output,
             }
         }
 
-    # ✅ FALLBACK
-    if execution.status == "fallback":
+    # FALLBACK (terminal but degraded)
+    if execution.status == State.FALLBACK:
         return {
-            "status": "ready",
             "execution_id": execution.id,
-            "cached": True,
-            "fallback": True,
-            "data": {
+            "status": "fallback",
+            "is_terminal": True,  # ✅ Polling can stop
+            "result": {
                 "metrics": execution.analytics_snapshot,
                 "explanation": execution.llm_output,
             }
         }
 
-    # ✅ FAILED or CANCELLED
+    # FAILED or CANCELLED (terminal with error)
     return {
-        "status": "failed",
         "execution_id": execution.id,
+        "status": execution.status,  # "failed" or "cancelled"
+        "is_terminal": True,  # ✅ Polling can stop
         "error": execution.error_message or "Unknown error",
-        "step_failed": execution.step_failed,
+        "error_code": execution.error_code,
     }
