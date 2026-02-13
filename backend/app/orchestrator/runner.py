@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.models.execution import InsightExecution
 from app.orchestrator.state import State
@@ -22,10 +22,42 @@ from app.orchestrator.hashing import (
     find_reusable_execution,
 )
 
+MAX_EXECUTION_TIME_SECONDS = 120
+
 class InsightRunner:
 
     PIPELINE_VERSION = "3.0"
     PROMPT_VERSION = "1.0"
+
+    def _is_stale(self, execution: InsightExecution) -> bool:
+        """
+        Detect if an execution has been running too long (zombie).
+        
+        Returns True if:
+        - Status is active (pending/running/locked)
+        - AND started_at was more than MAX_EXECUTION_TIME ago
+        """
+        if not execution.started_at:
+            return False
+        
+        now = datetime.utcnow()
+        elapsed = now - execution.started_at
+        
+        return elapsed.total_seconds() > MAX_EXECUTION_TIME_SECONDS
+    
+    async def _mark_stale_as_failed(self, db: AsyncSession, execution: InsightExecution):
+        """
+        Mark a stale execution as failed so it doesn't block future requests.
+        """
+        execution.status = State.FAILED
+        execution.error_code = "stale_execution"
+        execution.error_message = f"Execution exceeded max runtime of {MAX_EXECUTION_TIME_SECONDS}s"
+        execution.step_failed = "timeout"
+        execution.completed_at = datetime.utcnow()
+        
+        await db.commit()
+        await db.refresh(execution)
+
     
     def _build_prompt(self, metrics: dict, rag: list) -> str:
         return f"""
@@ -162,7 +194,14 @@ class InsightRunner:
         active = result.scalar_one_or_none()
 
         if active:
-            return active
+            # ✅ CHECK IF STALE (zombie detection)
+            if self._is_stale(active):
+                # Stale execution found — mark as failed and continue
+                await self._mark_stale_as_failed(db, active)
+                # Fall through to create new execution
+            else:
+                # Fresh execution — reuse it
+                return active
 
         # 2️⃣ Check cached SUCCESS execution
         stmt_success = select(InsightExecution).where(
