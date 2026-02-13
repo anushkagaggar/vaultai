@@ -87,7 +87,12 @@ class InsightRunner:
         execution.embedding_version = "v1"
         execution.analytics_snapshot = metrics
 
+        # 🔴 CRITICAL — make execution visible to polling clients
+        await db.commit()
+        await db.refresh(execution)
+
         await self._set_state(db, execution, State.RUNNING)
+        await db.commit()
 
         try:
             # ---------------- RAG ----------------

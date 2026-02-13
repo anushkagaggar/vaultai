@@ -18,6 +18,8 @@ from app.routes import rag
 
 from app.middleware.logging import log_requests
 from app.routes import insights
+from app.routes import executions
+
 
 app = FastAPI()
 app.include_router(auth.router)
@@ -27,6 +29,7 @@ app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 app.middleware("http")(log_requests)
+app.include_router(executions.router)
 from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
