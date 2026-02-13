@@ -12,6 +12,7 @@ from sqlalchemy import desc, func
 from app.schemas.expense import ExpenseUpdate
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 from sqlalchemy import desc, asc
+from sqlalchemy.sql import func
 
 
 @router.get("/", response_model=list[ExpenseOut])
@@ -137,6 +138,8 @@ async def update_expense(
 
     for key, value in data.items():
         setattr(db_expense, key, value)
+    
+    db_expense.updated_at = func.now()
 
     await db.commit()
     await db.refresh(db_expense)

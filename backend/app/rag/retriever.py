@@ -1,5 +1,7 @@
 from app.rag.embedder import embed_texts
 from app.vectordb.qdrant_client import search_chunks
+from app.models.rag_document import RagDocument
+from sqlalchemy import select
 
 async def retrieve_context(
     query: str,
@@ -25,3 +27,30 @@ async def retrieve_context(
             contexts.append(point.payload["text"])
 
     return contexts
+
+async def get_rag_context(db, user_id: int) -> tuple[str, str]:
+    """
+    Returns:
+    prompt_context -> formatted text for LLM
+    raw_text -> raw document text for validator grounding
+    """
+
+    docs = await db.execute(
+        select(RagDocument.content)
+        .where(RagDocument.user_id == user_id, RagDocument.active == True)
+        .order_by(RagDocument.updated_at.desc())
+        .limit(5)
+    )
+
+    rows = docs.scalars().all()
+
+    if not rows:
+        return "", ""
+
+    # what model sees
+    prompt_context = "\n\n".join(rows)
+
+    # what validator checks against (same but NOT summarized)
+    raw_text = " ".join(rows)
+
+    return prompt_context, raw_text

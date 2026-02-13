@@ -1,11 +1,12 @@
 import hashlib
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy import cast, DateTime
 from app.models.expense import Expense
 from app.models.rag_document import RagDocument
 from app.models.execution import InsightExecution
 from app.orchestrator.state import State
+from datetime import datetime
 
 
 # ---------------- EXPENSE FINGERPRINT ----------------
@@ -37,10 +38,12 @@ async def _rag_fingerprint(db: AsyncSession, user_id: int) -> str:
     - replace document content
     """
 
+    EPOCH = datetime(1970, 1, 1)
+
     stmt = select(
         func.count(RagDocument.id),
-        func.coalesce(func.max(RagDocument.uploaded_at), "1970-01-01"),
-        func.coalesce(func.sum(func.length(RagDocument.hash)), 0),
+        func.coalesce(func.max(RagDocument.uploaded_at), EPOCH),
+        func.coalesce(func.sum(func.length(RagDocument.content_hash)), 0),
     ).where(
         RagDocument.user_id == user_id,
         RagDocument.active == True

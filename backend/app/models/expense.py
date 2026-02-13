@@ -3,6 +3,8 @@ from sqlalchemy.orm import relationship
 from datetime import date
 
 from app.models.base import Base
+from sqlalchemy.sql import func
+from sqlalchemy import DateTime
 
 
 class Expense(Base):
@@ -36,3 +38,6 @@ class Expense(Base):
     __table_args__ = (
     Index("idx_expenses_user_date", "user_id", "expense_date"),
     )
+    
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

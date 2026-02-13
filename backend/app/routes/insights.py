@@ -6,6 +6,7 @@ from app.services.insight_service import generate_trends_insight
 from app.middleware.auth import get_current_user
 
 from app.orchestrator import InsightRunner
+from app.orchestrator.response_mapper import map_execution_to_http
 
 router = APIRouter(prefix="/insights", tags=["Insights"])
 runner = InsightRunner()
@@ -17,10 +18,4 @@ async def get_trends(
 ):
     execution, result = await runner.run(db, user.id, "trends")
 
-    return {
-        "execution_id": execution.id,
-        "status": execution.status,
-        "insight_type": execution.insight_type,
-        "data": result,
-        "created_at": execution.started_at.isoformat() if execution.started_at else None,
-    }
+    return map_execution_to_http(execution, result)

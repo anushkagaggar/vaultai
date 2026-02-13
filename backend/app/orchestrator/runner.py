@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import datetime
 
 from app.models.execution import InsightExecution
 from app.orchestrator.state import State
@@ -48,7 +48,6 @@ class InsightRunner:
     async def run(self, db: AsyncSession, user_id: int, insight_type: str):
         # -------------------------------------------------
         # STEP 1 — PRECOMPUTE ANALYTICS FOR HASH
-        # (cheap deterministic part)
         # -------------------------------------------------
         metrics = await build_trends_report(db, user_id)
 
@@ -61,7 +60,6 @@ class InsightRunner:
             model_version="phi3:mini",
             embedding_version="v1",
         )
-
 
         # -------------------------------------------------
         # STEP 2 — REUSE CHECK
@@ -97,7 +95,7 @@ class InsightRunner:
                 query=str(metrics),
                 user_id=user_id
             )
-            execution.rag_snapshot = rag_context
+            execution.rag_snapshot = rag_context  # Store as list
 
             # ---------------- PROMPT ----------------
             prompt = self._build_prompt(metrics, rag_context)
@@ -108,13 +106,17 @@ class InsightRunner:
             execution.llm_output = llm_output
 
             # ---------------- VALIDATION ----------------
-            if not validate_explanation(llm_output, metrics):
+            # ✅ PASS RAG TEXT TO VALIDATOR
+            # 🔹 COMBINE RAG CHUNKS INTO SINGLE STRING FOR VALIDATION
+            rag_text = "\n".join(rag_context) if rag_context else ""
+            if not validate_explanation(llm_output, metrics, rag_text=rag_text):
                 execution.step_failed = "validation"
                 raise RecoverableError("Validation failed")
 
             final = {
                 "metrics": metrics,
                 "explanation": llm_output,
+                "rag_context": rag_context,  # ✅ Include RAG in response
             }
 
             await self._set_state(db, execution, State.SUCCESS)
@@ -143,7 +145,7 @@ class InsightRunner:
     # ---------------- INTERNALS ---------------- #
 
     async def _acquire_lock(self, db: AsyncSession, user_id: int, insight_type: str, source_hash: str):
-        # 1️⃣ Check existing ACTIVE execution (lock / running / pending)
+        # 1️⃣ Check existing ACTIVE execution
         stmt_active = select(InsightExecution).where(
             InsightExecution.user_id == user_id,
             InsightExecution.insight_type == insight_type,
@@ -155,8 +157,7 @@ class InsightRunner:
         active = result.scalar_one_or_none()
 
         if active:
-            return active   # reuse running job
-
+            return active
 
         # 2️⃣ Check cached SUCCESS execution
         stmt_success = select(InsightExecution).where(
@@ -170,8 +171,7 @@ class InsightRunner:
         cached = result.scalar_one_or_none()
 
         if cached:
-            return cached   # reuse cached insight
-
+            return cached
 
         # 3️⃣ Create new execution
         execution = InsightExecution(
@@ -181,7 +181,7 @@ class InsightRunner:
             pipeline_version=self.PIPELINE_VERSION,
             prompt_template_version=self.PROMPT_VERSION,
             status=State.LOCKED,
-            started_at=datetime.now(UTC),
+            started_at=datetime.utcnow(),
         )
 
         try:
@@ -192,8 +192,6 @@ class InsightRunner:
 
         except IntegrityError:
             await db.rollback()
-
-            # Another request inserted at same time → fetch it
             retry = await db.execute(stmt_active)
             return retry.scalar_one()
 
@@ -205,21 +203,18 @@ class InsightRunner:
 
 
     async def _cancel(self, db, execution):
-
         execution.status = State.CANCELLED
         execution.completed_at = datetime.utcnow()
         await db.commit()
 
 
     async def _fallback(self, db, execution):
-
         execution.status = State.FALLBACK
         execution.completed_at = datetime.utcnow()
         await db.commit()
 
 
     async def _fail(self, db, execution, error):
-
         execution.status = State.FAILED
         execution.error_message = str(error)
         execution.completed_at = datetime.utcnow()

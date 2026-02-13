@@ -43,3 +43,5 @@ class InsightExecution(Base):
     completed_at = Column(DateTime)
 
     step_failed = Column(String(50))
+
+    llm_output = Column(Text)

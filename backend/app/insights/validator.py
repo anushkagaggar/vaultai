@@ -19,35 +19,59 @@ FORBIDDEN_WORDS = [
 
 
 # ----------------------------
-# Number Extraction
+# Number Extraction (HARDENED)
 # ----------------------------
 
 def extract_numbers(text: str):
     """
-    Extract numeric values from text, ignoring dates and day counts.
+    Extract numeric values from text while EXCLUDING:
+    - Years (2020-2099)
+    - Dates (patterns like 2026-02-12)
+    - Ordinals (1st, 2nd, 3rd)
+    - Time (3:30, 8.5 hours)
+    - Small integers likely to be counts/days (< 32)
+    
+    ONLY extract financial amounts.
     """
-    # Find all numbers including decimals
-    raw = re.findall(r"\d+\.?\d*", text)
+    
+    # Remove common date patterns first
+    cleaned = re.sub(r'\b(19|20)\d{2}[-/]\d{1,2}[-/]\d{1,2}\b', '', text)  # 2026-02-12
+    cleaned = re.sub(r'\b\d{1,2}:\d{2}\b', '', cleaned)  # 3:30
+    cleaned = re.sub(r'\b\d+(st|nd|rd|th)\b', '', cleaned, flags=re.IGNORECASE)  # 1st, 2nd
+    
+    # Extract numbers (including comma-separated: $1,234.56)
+    # Matches: 1234.56 or 1,234.56
+    pattern = r'\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\b'
+    raw = re.findall(pattern, cleaned)
     
     nums = []
     for x in raw:
-        val = float(x)
-        # Ignore very small numbers (dates, day counts, percentages < 100)
-        if val >= 100:
-            nums.append(val)
+        # Remove commas and convert
+        val = float(x.replace(',', ''))
+        
+        # Filter out:
+        # - Years (2020-2099)
+        # - Small day/count numbers (1-31)
+        # - Percentages > 1000 without context (likely 2950% = actual value is 2950.0)
+        if 2020 <= val <= 2099:
+            continue  # Skip years
+        if val < 100:
+            continue  # Skip small numbers (days, counts, percentages)
+        
+        nums.append(val)
     
     return nums
 
 
 # ----------------------------
-# Metric Collection
+# Metric Collection (UNCHANGED)
 # ----------------------------
 
 def collect_metric_numbers(metrics: dict):
     """
     Collect all numeric values from metrics as floats.
     """
-    nums = set()  # Use set to avoid duplicates
+    nums = set()
 
     # Rolling averages
     for v in metrics["rolling"].values():
@@ -66,72 +90,63 @@ def collect_metric_numbers(metrics: dict):
 
 
 # ----------------------------
-# Numeric Validator
+# Numeric Validator (WITH TOLERANCE)
 # ----------------------------
 
 def validate_numbers(text: str, metrics: dict, rag_text: str = "") -> bool:
     """
-    Validate that numbers in text come from either:
-    1. Computed metrics, OR
-    2. RAG documents (allowed source)
-    
-    Rejects only numbers that appear nowhere in approved sources.
+    A number is valid if it exists in:
+    - computed metrics (with rounding tolerance)
+    - OR retrieved RAG text (with rounding tolerance)
     """
+
     found = extract_numbers(text)
-    
     if not found:
-        # No numbers found, that's fine
         return True
+
+    metric_nums = collect_metric_numbers(metrics)
+    rag_nums = set(extract_numbers(rag_text)) if rag_text else set()
+
+    allowed = metric_nums.union(rag_nums)
+
+    logger.debug(f"LLM numbers: {found}")
+    logger.debug(f"Metric numbers: {metric_nums}")
+    logger.debug(f"RAG numbers: {rag_nums}")
+
+    invalid = []
     
-    # Get approved numbers from metrics
-    approved_metrics = collect_metric_numbers(metrics)
-    
-    # Get approved numbers from RAG documents
-    approved_rag = set(extract_numbers(rag_text)) if rag_text else set()
-    
-    # Combine all approved numbers
-    all_approved = approved_metrics.union(approved_rag)
-    
-    logger.debug(f"Found numbers in LLM output: {found}")
-    logger.debug(f"Approved from metrics: {approved_metrics}")
-    logger.debug(f"Approved from RAG: {approved_rag}")
-    
-    unapproved = []
-    
-    for f in found:
+    for num in found:
         matched = False
         
-        for approved in all_approved:
-            # Lenient tolerance for rounding
-            if math.isclose(f, approved, rel_tol=0.05, abs_tol=10.0):
+        # Check against all allowed numbers with tolerance
+        for approved in allowed:
+            # Allow ±5% relative error or ±10 absolute error
+            if math.isclose(num, approved, rel_tol=0.05, abs_tol=10.0):
                 matched = True
                 break
         
         if not matched:
-            unapproved.append(f)
-    
-    # Allow some flexibility: max 2 unapproved numbers OR < 20% unapproved
-    unapproved_ratio = len(unapproved) / len(found) if found else 0
-    
-    if len(unapproved) > 2 and unapproved_ratio > 0.2:
-        logger.warning(f"Too many unapproved numbers: {unapproved}")
+            invalid.append(num)
+
+    if invalid:
+        logger.warning(f"Numbers not grounded in data: {invalid}")
         return False
-    
+
     return True
 
 
 # ----------------------------
-# Main Validator
+# Main Validator (UNCHANGED)
 # ----------------------------
 
 def validate_explanation(text: str, metrics: dict, rag_text: str = "") -> bool:
     """
     Validate LLM explanation against:
-    1. Forbidden speculative language (phrases, not individual words)
+    1. Forbidden speculative language
     2. Numbers must come from metrics OR RAG documents
     """
     
-    # 1. No forbidden language (check for phrases, not just words)
+    # 1. No forbidden language
     lowered = text.lower()
     
     for phrase in FORBIDDEN_WORDS:
@@ -139,7 +154,7 @@ def validate_explanation(text: str, metrics: dict, rag_text: str = "") -> bool:
             logger.warning(f"Found forbidden phrase: {phrase}")
             return False
 
-    # 2. Validate numbers against both metrics AND RAG
+    # 2. Validate numbers
     if not validate_numbers(text, metrics, rag_text):
         logger.warning("Number validation failed")
         return False

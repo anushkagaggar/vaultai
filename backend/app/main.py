@@ -48,7 +48,11 @@ logging.basicConfig(
 
 @app.on_event("startup")
 async def startup_event():
-    init_collection()
+    try:
+        init_collection()
+        print("Qdrant connected")
+    except Exception as e:
+        print("Qdrant unavailable — RAG disabled:", e)
 
 app.include_router(rag.router)
 
