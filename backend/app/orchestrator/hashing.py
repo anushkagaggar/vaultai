@@ -86,6 +86,9 @@ async def build_source_hash(
 
 
 # ---------------- REUSE LOOKUP ----------------
+# app/orchestrator/hashing.py
+
+# ---------------- REUSE LOOKUP (FIXED) ----------------
 async def find_reusable_execution(
     db: AsyncSession,
     user_id: int,
@@ -93,9 +96,28 @@ async def find_reusable_execution(
     source_hash: str,
 ) -> InsightExecution | None:
     """
-    Reuse only SUCCESS executions.
-    Never reuse fallback / failed / running states.
+    Return existing execution if it exists in ANY of these states:
+    - PENDING (queued)
+    - RUNNING (actively computing)
+    - LOCKED (acquiring resources)
+    - SUCCESS (completed successfully)
+    - FALLBACK (completed with degraded result)
+    
+    Do NOT reuse:
+    - FAILED (execution error)
+    - CANCELLED (user cancelled)
+    
+    This makes POST idempotent: same request → same execution_id
     """
+
+    # ✅ Include all "active or successful" states
+    reusable_states = [
+        State.PENDING,
+        State.LOCKED,
+        State.RUNNING,
+        State.SUCCESS,
+        State.FALLBACK,
+    ]
 
     stmt = (
         select(InsightExecution)
@@ -103,9 +125,9 @@ async def find_reusable_execution(
             InsightExecution.user_id == user_id,
             InsightExecution.insight_type == insight_type,
             InsightExecution.source_hash == source_hash,
-            InsightExecution.status == State.SUCCESS,
+            InsightExecution.status.in_(reusable_states),  # ✅ Expanded states
         )
-        .order_by(InsightExecution.completed_at.desc())
+        .order_by(InsightExecution.started_at.desc())  # ✅ Most recent first
         .limit(1)
     )
 
