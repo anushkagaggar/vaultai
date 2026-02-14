@@ -75,7 +75,7 @@ async def get_execution(
                 "explanation": execution.llm_output,
                 "validation": {  # ✅ Include validation report
                     "numbers_ok": report.numbers_ok,
-                    "forbidden_language": report.forbidden_language,
+                    "forbidden_language_ok": report.forbidden_language_ok,
                     "rag_supported": report.rag_supported,
                     "has_content": report.has_content,
                     "reasoning_quality": report.reasoning_quality,
