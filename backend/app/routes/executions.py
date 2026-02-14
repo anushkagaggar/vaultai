@@ -7,6 +7,7 @@ from app.models.execution import InsightExecution
 from app.middleware.auth import get_current_user
 from app.models.user import User
 from app.orchestrator.state import State  
+from app.validation.diagnostic import build_validation_report
 
 router = APIRouter(prefix="/executions", tags=["executions"])
 
@@ -58,6 +59,13 @@ async def get_execution(
     
     # SUCCESS
     if execution.status == State.SUCCESS:
+        # ✅ Rebuild validation report
+        rag_text = "\n".join(execution.rag_snapshot) if execution.rag_snapshot else ""
+        report = build_validation_report(
+            execution.llm_output,
+            execution.analytics_snapshot,
+            rag_text
+        )
         return {
             "execution_id": execution.id,
             "status": "success",
@@ -65,6 +73,15 @@ async def get_execution(
             "result": {
                 "metrics": execution.analytics_snapshot,
                 "explanation": execution.llm_output,
+                "validation": {  # ✅ Include validation report
+                    "numbers_ok": report.numbers_ok,
+                    "forbidden_language": report.forbidden_language,
+                    "rag_supported": report.rag_supported,
+                    "has_content": report.has_content,
+                    "reasoning_quality": report.reasoning_quality,
+                    "classification_hint": report.classification_hint,
+                    "issues": report.issues,
+                }
             }
         }
 

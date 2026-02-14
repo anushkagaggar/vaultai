@@ -12,20 +12,30 @@ from datetime import datetime
 # ---------------- EXPENSE FINGERPRINT ----------------
 async def _expense_fingerprint(db: AsyncSession, user_id: int) -> str:
     """
-    Detects:
-    - new expense
-    - deleted expense
-    - edited expense
+    Content-based fingerprint.
+    Changes only if expense data actually changes.
     """
-
     stmt = select(
-        func.count(Expense.id),
-        func.coalesce(func.max(Expense.updated_at), func.max(Expense.created_at))
-    ).where(Expense.user_id == user_id)
+        Expense.id,
+        Expense.amount,
+        Expense.category,
+        Expense.expense_date
+    ).where(
+        Expense.user_id == user_id
+    ).order_by(Expense.id)
 
-    count, last_update = (await db.execute(stmt)).one()
-
-    return f"{count}:{last_update}"
+    expenses = (await db.execute(stmt)).all()
+    
+    if not expenses:
+        return "empty"
+    
+    # Build deterministic content string
+    content = "|".join(
+        f"{e.id}:{e.amount}:{e.category}:{e.expense_date}"
+        for e in expenses
+    )
+    
+    return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
 # ---------------- RAG FINGERPRINT ----------------

@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta
+import logging
+logger = logging.getLogger(__name__)
+
 
 from app.models.execution import InsightExecution
 from app.orchestrator.state import State
@@ -16,6 +19,7 @@ from app.analytics.trends import build_trends_report
 from app.rag.retriever import retrieve_context
 from app.llm.client import generate_explanation
 from app.insights.validator import validate_explanation
+from app.validation.diagnostic import build_validation_report
 
 from app.orchestrator.hashing import (
     build_source_hash,
@@ -27,7 +31,7 @@ MAX_EXECUTION_TIME_SECONDS = 120
 class InsightRunner:
 
     PIPELINE_VERSION = "3.0"
-    PROMPT_VERSION = "1.0"
+    PROMPT_VERSION = "1.1"
 
     def _is_stale(self, execution: InsightExecution) -> bool:
         """
@@ -60,22 +64,50 @@ class InsightRunner:
 
     
     def _build_prompt(self, metrics: dict, rag: list) -> str:
-        return f"""
-            You are a financial insight system.
-
-            Metrics:
-            {metrics}
-
-            Context:
-            {rag}
-
-            Rules:
-            - Do not invent numbers
-            - Do not give advice
-            - Only explain facts
-
-            Write a concise explanation.
         """
+        Build a constrained prompt that minimizes hallucination.
+        """
+        
+        # Limit RAG context to prevent confusion
+        rag_text = "\n\n".join(rag[:1])[:500] if rag else "No additional context"
+        
+        return f"""You are generating a financial insight.
+
+    STRICT RULES:
+    - Write EXACTLY 2-3 sentences
+    - Use ONLY numbers from the "Approved Data" section below
+    - DO NOT add analysis beyond what the numbers show
+    - DO NOT mention user IDs, document entries, or data not listed
+    - DO NOT invent transaction amounts
+    - Stop after completing your explanation
+
+    Approved Data:
+
+    Rolling averages:
+    - 30-day: {metrics['rolling']['30_day_avg']}
+    - 60-day: {metrics['rolling']['60_day_avg']}
+    - 90-day: {metrics['rolling']['90_day_avg']}
+
+    Monthly comparison:
+    - Current month: {metrics['monthly']['current_month']}
+    - Previous month: {metrics['monthly']['previous_month']}
+    - Change: {metrics['monthly']['percent_change']}%
+
+    Category totals:
+    {self._format_categories(metrics['categories'])}
+
+    Supporting context (for reference only, do not use specific amounts):
+    {rag_text}
+
+    Write 2-3 sentences explaining the spending trend using ONLY the aggregate numbers above."""
+
+
+    def _format_categories(self, categories: list) -> str:
+        """Format categories for prompt."""
+        return "\n".join([
+            f"- {cat['category']}: {cat['total']}"
+            for cat in categories
+        ])
 
     async def run(self, db: AsyncSession, user_id: int, insight_type: str):
         # -------------------------------------------------
@@ -92,7 +124,9 @@ class InsightRunner:
             model_version="phi3:mini",
             embedding_version="v1",
         )
-
+        # ✅ DEBUG LOG
+        logger.info(f"Computed source_hash: {source_hash}")
+    
         # -------------------------------------------------
         # STEP 2 — REUSE CHECK
         # -------------------------------------------------
@@ -101,11 +135,15 @@ class InsightRunner:
         )
 
         if reusable:
+            logger.info(f"Reusing execution {reusable.id}")
             return reusable, {
                 "metrics": reusable.analytics_snapshot,
                 "explanation": reusable.llm_output,
                 "cached": True,
             }
+        
+        else:
+            logger.info(f"No reusable execution found for hash {source_hash}")
 
         # -------------------------------------------------
         # STEP 3 — CREATE NEW EXECUTION
@@ -140,12 +178,21 @@ class InsightRunner:
 
             # ---------------- LLM ----------------
             llm_output = await generate_explanation(prompt)
+            # ✅ Clean up output - take only first 2-3 sentences
+            if "-----" in llm_output or "---" in llm_output:
+                llm_output = llm_output.split("-----")[0].split("---")[0].strip()
+
+            sentences = llm_output.split('. ')
+            if len(sentences) > 3:
+                llm_output = '. '.join(sentences[:3]) + '.'
             execution.llm_output = llm_output
 
             # ---------------- VALIDATION ----------------
             # ✅ PASS RAG TEXT TO VALIDATOR
             # 🔹 COMBINE RAG CHUNKS INTO SINGLE STRING FOR VALIDATION
             rag_text = "\n".join(rag_context) if rag_context else ""
+            report = build_validation_report(llm_output, metrics, rag_text)
+
             if not validate_explanation(llm_output, metrics, rag_text=rag_text):
                 execution.step_failed = "validation"
                 raise RecoverableError("Validation failed")
@@ -153,7 +200,16 @@ class InsightRunner:
             final = {
                 "metrics": metrics,
                 "explanation": llm_output,
-                "rag_context": rag_context,  # ✅ Include RAG in response
+                "rag_context": rag_context,
+                "validation": {  # ✅ NEW: Include diagnostic report
+                    "numbers_ok": report.numbers_ok,
+                    "forbidden_language_ok": report.forbidden_language_ok,
+                    "rag_supported": report.rag_supported,
+                    "has_content": report.has_content,
+                    "reasoning_quality": report.reasoning_quality,
+                    "classification_hint": report.classification_hint,
+                    "issues": report.issues,
+                }  
             }
 
             await self._set_state(db, execution, State.SUCCESS)
@@ -165,7 +221,7 @@ class InsightRunner:
 
             return execution, {
                 "metrics": metrics,
-                "explanation": "Insight failed validation",
+                "explanation": llm_output,
                 "fallback": True,
             }
 

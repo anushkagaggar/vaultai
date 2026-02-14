@@ -106,7 +106,7 @@ async def upload_doc(
         filename=file.filename,
         version=version,
         trust_level=trust,
-        hash=file_hash,
+        content_hash=file_hash,
         active=True
     )
 
