@@ -20,6 +20,7 @@ from app.rag.retriever import retrieve_context
 from app.llm.client import generate_explanation
 from app.insights.validator import validate_explanation
 from app.validation.diagnostic import build_validation_report
+from app.validation.decision import decide, explain_decision, ExecutionDecision
 
 from app.orchestrator.hashing import (
     build_source_hash,
@@ -135,7 +136,7 @@ class InsightRunner:
         )
 
         if reusable:
-            logger.info(f"Reusing execution {reusable.id}")
+            logger.info(f"Reusing execution {reusable.id} (status: {reusable.status})")
             return reusable, {
                 "metrics": reusable.analytics_snapshot,
                 "explanation": reusable.llm_output,
