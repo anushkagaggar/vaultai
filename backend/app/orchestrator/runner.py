@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta
 import logging
-logger = logging.getLogger(__name__)
-
 
 from app.models.execution import InsightExecution
 from app.orchestrator.state import State
@@ -18,21 +16,28 @@ from sqlalchemy.exc import IntegrityError
 from app.analytics.trends import build_trends_report
 from app.rag.retriever import retrieve_context
 from app.llm.client import generate_explanation
-from app.insights.validator import validate_explanation
 from app.validation.diagnostic import build_validation_report
 from app.validation.decision import decide, explain_decision, ExecutionDecision
+from app.insights.artifact_service import create_artifact_from_execution
 
 from app.orchestrator.hashing import (
     build_source_hash,
     find_reusable_execution,
 )
 
+logger = logging.getLogger(__name__)
+
 MAX_EXECUTION_TIME_SECONDS = 120
+
 
 class InsightRunner:
 
     PIPELINE_VERSION = "3.0"
     PROMPT_VERSION = "1.1"
+
+    # =====================================================
+    # HELPER METHODS
+    # =====================================================
 
     def _is_stale(self, execution: InsightExecution) -> bool:
         """
@@ -50,6 +55,7 @@ class InsightRunner:
         
         return elapsed.total_seconds() > MAX_EXECUTION_TIME_SECONDS
     
+
     async def _mark_stale_as_failed(self, db: AsyncSession, execution: InsightExecution):
         """
         Mark a stale execution as failed so it doesn't block future requests.
@@ -63,54 +69,143 @@ class InsightRunner:
         await db.commit()
         await db.refresh(execution)
 
-    
-    def _build_prompt(self, metrics: dict, rag: list) -> str:
-        """
-        Build a constrained prompt that minimizes hallucination.
-        """
-        
-        # Limit RAG context to prevent confusion
-        rag_text = "\n\n".join(rag[:1])[:500] if rag else "No additional context"
-        
-        return f"""You are generating a financial insight.
-
-    STRICT RULES:
-    - Write EXACTLY 2-3 sentences
-    - Use ONLY numbers from the "Approved Data" section below
-    - DO NOT add analysis beyond what the numbers show
-    - DO NOT mention user IDs, document entries, or data not listed
-    - DO NOT invent transaction amounts
-    - Stop after completing your explanation
-
-    Approved Data:
-
-    Rolling averages:
-    - 30-day: {metrics['rolling']['30_day_avg']}
-    - 60-day: {metrics['rolling']['60_day_avg']}
-    - 90-day: {metrics['rolling']['90_day_avg']}
-
-    Monthly comparison:
-    - Current month: {metrics['monthly']['current_month']}
-    - Previous month: {metrics['monthly']['previous_month']}
-    - Change: {metrics['monthly']['percent_change']}%
-
-    Category totals:
-    {self._format_categories(metrics['categories'])}
-
-    Supporting context (for reference only, do not use specific amounts):
-    {rag_text}
-
-    Write 2-3 sentences explaining the spending trend using ONLY the aggregate numbers above."""
-
 
     def _format_categories(self, categories: list) -> str:
-        """Format categories for prompt."""
+        """Format categories for prompt clarity."""
         return "\n".join([
             f"- {cat['category']}: {cat['total']}"
             for cat in categories
         ])
+    
+
+    def _build_prompt(self, metrics: dict, rag: list) -> str:
+        """
+        Build a constrained prompt that minimizes hallucination.
+        Emphasizes aggregate metrics over individual transactions.
+        """
+        
+        # Limit RAG to prevent confusion with individual transactions
+        rag_text = "\n\n".join(rag[:1])[:500] if rag else "No additional context"
+        
+        return f"""You are generating a financial insight.
+
+STRICT RULES:
+- Write EXACTLY 2-3 sentences
+- Use ONLY numbers from the "Approved Data" section below
+- DO NOT add analysis beyond what the numbers show
+- DO NOT mention user IDs, document entries, or data not listed
+- DO NOT invent transaction amounts
+- Stop after completing your explanation
+
+Approved Data:
+
+Rolling averages:
+- 30-day: {metrics['rolling']['30_day_avg']}
+- 60-day: {metrics['rolling']['60_day_avg']}
+- 90-day: {metrics['rolling']['90_day_avg']}
+
+Monthly comparison:
+- Current month: {metrics['monthly']['current_month']}
+- Previous month: {metrics['monthly']['previous_month']}
+- Change: {metrics['monthly']['percent_change']}%
+
+Category totals:
+{self._format_categories(metrics['categories'])}
+
+Supporting context (for reference only, do not use specific amounts):
+{rag_text}
+
+Write 2-3 sentences explaining the spending trend using ONLY the aggregate numbers above."""
+
+
+    def _clean_llm_output(self, raw_output: str) -> str:
+        """
+        Clean LLM output to 2-3 sentences max.
+        Removes separator lines and excess content.
+        """
+        # Remove separator lines
+        if "-----" in raw_output or "---" in raw_output:
+            raw_output = raw_output.split("-----")[0].split("---")[0].strip()
+        
+        # Limit to 3 sentences
+        sentences = raw_output.split('. ')
+        if len(sentences) > 3:
+            return '. '.join(sentences[:3]) + '.'
+        
+        return raw_output
+
+
+    def _build_validation_report(
+        self,
+        llm_output: str,
+        metrics: dict,
+        rag_snapshot: list
+    ) -> tuple:
+        """
+        Build validation report and decision.
+        Returns (report, decision)
+        """
+        rag_text = "\n".join(rag_snapshot) if rag_snapshot else ""
+        report = build_validation_report(llm_output, metrics, rag_text)
+        decision = decide(report)
+        return report, decision
+
+
+    def _build_result_dict(
+        self,
+        metrics: dict,
+        explanation: str,
+        rag_context: list,
+        decision: ExecutionDecision,
+        report,
+        cached: bool = False
+    ) -> dict:
+        """
+        Build standardized result dictionary with validation info.
+        Eliminates duplicate result building logic.
+        """
+        return {
+            "metrics": metrics,
+            "explanation": explanation,
+            "rag_context": rag_context,
+            "cached": cached,
+            "decision": decision.value,
+            "validation": {
+                "numbers_ok": report.numbers_ok,
+                "forbidden_language_ok": report.forbidden_language_ok,
+                "rag_supported": report.rag_supported,
+                "has_content": report.has_content,
+                "reasoning_quality": report.reasoning_quality,
+                "classification_hint": report.classification_hint,
+                "issues": report.issues,
+            }
+        }
+
+
+    async def _try_create_artifact(
+        self,
+        db: AsyncSession,
+        execution: InsightExecution,
+        result: dict
+    ):
+        """
+        Attempt artifact creation, log errors but don't crash.
+        """
+        if execution.status == State.SUCCESS:
+            try:
+                artifact = await create_artifact_from_execution(db, execution, result)
+                if artifact:
+                    logger.info(f"Artifact {artifact.id} for execution {execution.id}")
+            except Exception as e:
+                logger.error(f"Artifact creation failed for execution {execution.id}: {e}")
+
+
+    # =====================================================
+    # MAIN EXECUTION PIPELINE
+    # =====================================================
 
     async def run(self, db: AsyncSession, user_id: int, insight_type: str):
+        
         # -------------------------------------------------
         # STEP 1 — PRECOMPUTE ANALYTICS FOR HASH
         # -------------------------------------------------
@@ -125,9 +220,9 @@ class InsightRunner:
             model_version="phi3:mini",
             embedding_version="v1",
         )
-        # ✅ DEBUG LOG
+        
         logger.info(f"Computed source_hash: {source_hash}")
-    
+
         # -------------------------------------------------
         # STEP 2 — REUSE CHECK
         # -------------------------------------------------
@@ -137,14 +232,30 @@ class InsightRunner:
 
         if reusable:
             logger.info(f"Reusing execution {reusable.id} (status: {reusable.status})")
-            return reusable, {
-                "metrics": reusable.analytics_snapshot,
-                "explanation": reusable.llm_output,
-                "cached": True,
-            }
-        
-        else:
-            logger.info(f"No reusable execution found for hash {source_hash}")
+            
+            # Rebuild validation for cached execution
+            report, decision = self._build_validation_report(
+                reusable.llm_output,
+                reusable.analytics_snapshot,
+                reusable.rag_snapshot or []
+            )
+
+            # Build standardized result
+            result = self._build_result_dict(
+                metrics=reusable.analytics_snapshot,
+                explanation=reusable.llm_output,
+                rag_context=reusable.rag_snapshot or [],
+                decision=decision,
+                report=report,
+                cached=True
+            )
+
+            # Try artifact creation/lookup
+            await self._try_create_artifact(db, reusable, result)
+            
+            return reusable, result
+
+        logger.info(f"No reusable execution found for hash {source_hash}")
 
         # -------------------------------------------------
         # STEP 3 — CREATE NEW EXECUTION
@@ -158,7 +269,6 @@ class InsightRunner:
         execution.embedding_version = "v1"
         execution.analytics_snapshot = metrics
 
-        # 🔴 CRITICAL — make execution visible to polling clients
         await db.commit()
         await db.refresh(execution)
 
@@ -171,59 +281,96 @@ class InsightRunner:
                 query=str(metrics),
                 user_id=user_id
             )
-            execution.rag_snapshot = rag_context  # Store as list
+            execution.rag_snapshot = rag_context
 
             # ---------------- PROMPT ----------------
             prompt = self._build_prompt(metrics, rag_context)
             execution.prompt_snapshot = prompt
 
             # ---------------- LLM ----------------
-            llm_output = await generate_explanation(prompt)
-            # ✅ Clean up output - take only first 2-3 sentences
-            if "-----" in llm_output or "---" in llm_output:
-                llm_output = llm_output.split("-----")[0].split("---")[0].strip()
-
-            sentences = llm_output.split('. ')
-            if len(sentences) > 3:
-                llm_output = '. '.join(sentences[:3]) + '.'
+            llm_raw = await generate_explanation(prompt)
+            llm_output = self._clean_llm_output(llm_raw)
             execution.llm_output = llm_output
 
             # ---------------- VALIDATION ----------------
-            # ✅ PASS RAG TEXT TO VALIDATOR
-            # 🔹 COMBINE RAG CHUNKS INTO SINGLE STRING FOR VALIDATION
-            rag_text = "\n".join(rag_context) if rag_context else ""
-            report = build_validation_report(llm_output, metrics, rag_text)
+            report, decision = self._build_validation_report(
+                llm_output,
+                metrics,
+                rag_context or []
+            )
+            
+            decision_explanation = explain_decision(report, decision)
+            logger.info(f"Validation decision: {decision.value} - {decision_explanation}")
 
-            if not validate_explanation(llm_output, metrics, rag_text=rag_text):
-                execution.step_failed = "validation"
-                raise RecoverableError("Validation failed")
+            # ---------------- ACT ON DECISION ----------------
+            
+            if decision == ExecutionDecision.SUPPRESS:
+                # Treat as failure - no explanation stored
+                execution.step_failed = "validation_suppressed"
+                await self._fail(db, execution, Exception(decision_explanation))
+                
+                return execution, {
+                    "error": "Insight suppressed due to validation failure",
+                    "decision": decision.value,
+                    "reason": decision_explanation,
+                    "failed": True
+                }
+            
+            elif decision == ExecutionDecision.FALLBACK:
+                # Store degraded insight (analytics only)
+                execution.step_failed = "validation_fallback"
+                await self._fallback(db, execution)
+                
+                return execution, {
+                    "metrics": metrics,
+                    "explanation": "Spending trend analysis available but explanation failed validation. See metrics for details.",
+                    "fallback": True,
+                    "decision": decision.value,
+                    "reason": decision_explanation,
+                    "validation": {
+                        "numbers_ok": report.numbers_ok,
+                        "forbidden_language_ok": report.forbidden_language_ok,
+                        "rag_supported": report.rag_supported,
+                        "has_content": report.has_content,
+                        "reasoning_quality": report.reasoning_quality,
+                        "classification_hint": report.classification_hint,
+                        "issues": report.issues,
+                    }
+                }
+            
+            else:  # SUCCESS
+                # Build final result
+                final = self._build_result_dict(
+                    metrics=metrics,
+                    explanation=llm_output,
+                    rag_context=rag_context or [],
+                    decision=decision,
+                    report=report,
+                    cached=False
+                )
 
-            final = {
-                "metrics": metrics,
-                "explanation": llm_output,
-                "rag_context": rag_context,
-                "validation": {  # ✅ NEW: Include diagnostic report
-                    "numbers_ok": report.numbers_ok,
-                    "forbidden_language_ok": report.forbidden_language_ok,
-                    "rag_supported": report.rag_supported,
-                    "has_content": report.has_content,
-                    "reasoning_quality": report.reasoning_quality,
-                    "classification_hint": report.classification_hint,
-                    "issues": report.issues,
-                }  
-            }
+                await self._set_state(db, execution, State.SUCCESS)
+                
+                # Try artifact creation
+                await self._try_create_artifact(db, execution, final)
+                
+                return execution, final
 
-            await self._set_state(db, execution, State.SUCCESS)
-            return execution, final
+        except CancelledError:
+            await self._cancel(db, execution)
+            raise
 
-        except RecoverableError:
-            execution.step_failed = "validation"
+        except RecoverableError as e:
+            # This shouldn't happen anymore (decision engine handles it)
+            # But keep for backward compatibility
+            execution.step_failed = "validation_legacy"
             await self._fallback(db, execution)
 
             return execution, {
                 "metrics": metrics,
                 "explanation": llm_output,
                 "fallback": True,
+                "reason": str(e)
             }
 
         except Exception as e:
@@ -236,9 +383,22 @@ class InsightRunner:
             }
 
 
-    # ---------------- INTERNALS ---------------- #
+    # =====================================================
+    # INTERNAL STATE MANAGEMENT
+    # =====================================================
 
-    async def _acquire_lock(self, db: AsyncSession, user_id: int, insight_type: str, source_hash: str):
+    async def _acquire_lock(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        insight_type: str,
+        source_hash: str
+    ):
+        """
+        Acquire execution lock with stale detection.
+        Returns existing active/cached execution or creates new one.
+        """
+        
         # 1️⃣ Check existing ACTIVE execution
         stmt_active = select(InsightExecution).where(
             InsightExecution.user_id == user_id,
@@ -251,9 +411,8 @@ class InsightRunner:
         active = result.scalar_one_or_none()
 
         if active:
-            # ✅ CHECK IF STALE (zombie detection)
+            # Check if stale (zombie detection)
             if self._is_stale(active):
-                # Stale execution found — mark as failed and continue
                 await self._mark_stale_as_failed(db, active)
                 # Fall through to create new execution
             else:
