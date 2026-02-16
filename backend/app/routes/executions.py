@@ -93,7 +93,10 @@ async def get_execution(
             "is_terminal": True,  # ✅ Polling can stop
             "result": {
                 "metrics": execution.analytics_snapshot,
-                "explanation": execution.llm_output,
+                "explanation": execution.analytics_snapshot,
+                "explanation": None,  # ✅ No unreliable explanation
+                "fallback": True,
+                "message": "Metrics available but detailed explanation unavailable due to validation."
             }
         }
 

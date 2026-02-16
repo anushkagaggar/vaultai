@@ -182,20 +182,17 @@ Write 2-3 sentences explaining the spending trend using ONLY the aggregate numbe
         }
 
 
-    async def _try_create_artifact(
-        self,
-        db: AsyncSession,
-        execution: InsightExecution,
-        result: dict
-    ):
+    async def _try_create_artifact(self, db: AsyncSession, execution: InsightExecution, result: dict):
         """
-        Attempt artifact creation, log errors but don't crash.
+        Attempt artifact creation for SUCCESS or FALLBACK executions.
+        Logs errors but doesn't crash.
         """
-        if execution.status == State.SUCCESS:
+        if execution.status in [State.SUCCESS, State.FALLBACK]:  # ✅ Changed condition
             try:
                 artifact = await create_artifact_from_execution(db, execution, result)
                 if artifact:
-                    logger.info(f"Artifact {artifact.id} for execution {execution.id}")
+                    status_label = "full" if execution.status == State.SUCCESS else "degraded"
+                    logger.info(f"Created {status_label} artifact {artifact.id} for execution {execution.id}")
             except Exception as e:
                 logger.error(f"Artifact creation failed for execution {execution.id}: {e}")
 
@@ -302,10 +299,19 @@ Write 2-3 sentences explaining the spending trend using ONLY the aggregate numbe
             decision_explanation = explain_decision(report, decision)
             logger.info(f"Validation decision: {decision.value} - {decision_explanation}")
 
-            # ---------------- ACT ON DECISION ----------------
-            
+            # ---------------- VALIDATION & CLASSIFICATION ----------------
+            report, decision = self._build_validation_report(
+                llm_output,
+                metrics,
+                rag_context or []
+            )
+
+            decision_explanation = explain_decision(report, decision)
+            logger.info(f"Classification: {decision.value} - {decision_explanation}")
+
+            # ---------------- ACT ON CLASSIFICATION ----------------
             if decision == ExecutionDecision.SUPPRESS:
-                # Treat as failure - no explanation stored
+                # ❌ SUPPRESSED: Unsafe to store or show
                 execution.step_failed = "validation_suppressed"
                 await self._fail(db, execution, Exception(decision_explanation))
                 
@@ -315,15 +321,16 @@ Write 2-3 sentences explaining the spending trend using ONLY the aggregate numbe
                     "reason": decision_explanation,
                     "failed": True
                 }
-            
+
             elif decision == ExecutionDecision.FALLBACK:
-                # Store degraded insight (analytics only)
+                # ⚠️ FALLBACK: Metrics valid, explanation unreliable
                 execution.step_failed = "validation_fallback"
                 await self._fallback(db, execution)
                 
-                return execution, {
+                # Build degraded result (metrics only, no LLM explanation)
+                fallback_result = {
                     "metrics": metrics,
-                    "explanation": "Spending trend analysis available but explanation failed validation. See metrics for details.",
+                    "explanation": None,  # ✅ Removed unreliable explanation
                     "fallback": True,
                     "decision": decision.value,
                     "reason": decision_explanation,
@@ -337,9 +344,14 @@ Write 2-3 sentences explaining the spending trend using ONLY the aggregate numbe
                         "issues": report.issues,
                     }
                 }
-            
+                
+                # ✅ Still create artifact (degraded)
+                await self._try_create_artifact(db, execution, fallback_result)
+                
+                return execution, fallback_result
+
             else:  # SUCCESS
-                # Build final result
+                # ✅ SUCCESS: Full artifact with explanation
                 final = self._build_result_dict(
                     metrics=metrics,
                     explanation=llm_output,
@@ -351,7 +363,7 @@ Write 2-3 sentences explaining the spending trend using ONLY the aggregate numbe
 
                 await self._set_state(db, execution, State.SUCCESS)
                 
-                # Try artifact creation
+                # ✅ Create full artifact
                 await self._try_create_artifact(db, execution, final)
                 
                 return execution, final

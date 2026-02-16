@@ -33,6 +33,9 @@ def extract_numbers(text: str):
     
     ONLY extract financial amounts.
     """
+    # Remove dollar signs first
+    text = text.replace('$', '')  # ✅ NEW
+
     
     # Remove common date patterns first
     cleaned = re.sub(r'\b(19|20)\d{2}[-/]\d{1,2}[-/]\d{1,2}\b', '', text)  # 2026-02-12
