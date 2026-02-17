@@ -5,6 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from app.models.insight import Insight
 from app.models.execution import InsightExecution
 from app.orchestrator.state import State
+from app.confidence.scorer import compute_confidence 
+from app.confidence.collector import collect_confidence_inputs
 
 import logging
 logger = logging.getLogger(__name__)
@@ -51,6 +53,31 @@ async def create_artifact_from_execution(
         logger.info(f"Artifact already exists for execution {execution.id}, reusing artifact {existing.id}")
         return existing
     
+    # ✅ Compute confidence score
+    try:
+        metrics = execution.analytics_snapshot or {}
+        inputs = await collect_confidence_inputs(
+            db=db,
+            user_id=execution.user_id,
+            metrics=metrics,
+            classification=execution.status  # "success" or "fallback"
+        )
+        
+        breakdown = compute_confidence(inputs)
+        confidence = breakdown.final_confidence
+        
+        logger.info(
+            f"Confidence for execution {execution.id}: {confidence} "
+            f"(cov={breakdown.coverage_score}, "
+            f"win={breakdown.window_score}, "
+            f"stab={breakdown.stability_score}, "
+            f"exp={breakdown.explanation_score})"
+        )
+        
+    except Exception as e:
+        logger.error(f"Confidence scoring failed for execution {execution.id}: {e}")
+        confidence = 0.0  # Safe default
+    
     # ✅ Rule 3: Create new artifact (SUCCESS or FALLBACK)
     try:
         # For FALLBACK: Use degraded explanation
@@ -68,14 +95,17 @@ async def create_artifact_from_execution(
             status=execution.status,  # "success" or "fallback"
             pipeline_version=execution.pipeline_version,
             source_hash=execution.source_hash,
-            confidence=0.8 if execution.status == State.SUCCESS else 0.5,  # Lower confidence for fallback
+            confidence=confidence
         )
         
         db.add(artifact)
         await db.commit()
         await db.refresh(artifact)
         
-        logger.info(f"Created {execution.status} artifact {artifact.id} from execution {execution.id}")
+        logger.info(
+            f"Created artifact {artifact.id} "
+            f"(status={execution.status}, confidence={confidence})"
+        )
         return artifact
         
     except IntegrityError as e:
