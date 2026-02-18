@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+import os
+import uvicorn
 from app.config import settings
 from app.routes import auth
 from app.middleware.auth import get_current_user
@@ -21,7 +23,7 @@ from app.routes import insights
 from app.routes import executions
 from app.routes.system import router as system_router
 
-app = FastAPI()
+app = FastAPI(title="VaultAI V2")
 app.include_router(auth.router)
 app.include_router(expenses.router)
 app.include_router(insights.router)
@@ -60,6 +62,11 @@ async def startup_event():
 
 app.include_router(rag.router)
 
+@app.get("/")
+def root():
+    return {"status": "VaultAI V2 API Running"}
+
+
 @app.get("/health")
 def health():
     return {
@@ -73,3 +80,13 @@ async def me(current_user: User = Depends(get_current_user)):
         "id": current_user.id,
         "email": current_user.email
     }
+
+# ✅ For running with: python -m uvicorn app.main:app
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=False  # Set to False in production
+    )

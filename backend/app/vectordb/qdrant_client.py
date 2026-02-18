@@ -11,17 +11,25 @@ from qdrant_client.http.models import (
 import uuid
 
 
-QDRANT_HOST = "localhost"
-QDRANT_PORT = 6333
+# Pull from environment variables, fallback to localhost for local Docker testing if missing
+QDRANT_HOST = "https://983b6110-2375-40c0-9538-068d8d69e421.us-east-1-1.aws.cloud.qdrant.io"
+QDRANT_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.-aPPv-2pvGl-NIBG3700fhuJ2-QyikBj3Cpisqh-A6M"
 
 COLLECTION_NAME = "vaultai_rag"
 VECTOR_SIZE = 384
 
 
 def get_qdrant_client():
-    return QdrantClient(
-    url=f"http://{QDRANT_HOST}:{QDRANT_PORT}"
-)
+    """Initializes the Qdrant client using cloud credentials if available, otherwise local."""
+    if QDRANT_API_KEY:
+        # Connect to Qdrant Cloud
+        return QdrantClient(
+            url=QDRANT_HOST,
+            api_key=QDRANT_API_KEY
+        )
+    else:
+        # Connect to Local Docker
+        return QdrantClient(url=QDRANT_HOST)
 
 
 def init_collection():

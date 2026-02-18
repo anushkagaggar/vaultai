@@ -1,7 +1,7 @@
 import httpx
 
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_URL = "https://river-mystagogic-supernationally.ngrok-free.dev"
 MODEL_NAME = "phi3:mini"
 
 
