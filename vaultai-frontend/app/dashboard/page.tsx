@@ -8,7 +8,7 @@ import {
   getExpenseStats,
   updateExpense,
   deleteExpense,
-} from "@/lib/api";
+} from "../../lib/backend";
 
 export default function Dashboard() {
 
@@ -618,3 +618,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

@@ -1,68 +1,52 @@
-"use client";
-import { useState, useRef, DragEvent, ChangeEvent } from 'react';
-import { uploadDoc } from '@/lib/api';
+import { useRef } from "react";
 
-export default function UploadDropzone({ onUploadSuccess }: { onUploadSuccess: () => void }) {
-  const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+export function UploadDropzone({
+  onUpload,
+  uploading,
+  error,
+}: {
+  onUpload: (file: File) => void;
+  uploading: boolean;
+  error: string | null;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleDrag = (e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') setIsDragging(true);
-    else if (e.type === 'dragleave') setIsDragging(false);
-  };
+  const handleClick = () => fileRef.current?.click();
 
-  const handleDrop = async (e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      await handleUpload(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      await handleUpload(e.target.files[0]);
-    }
-  };
-
-  const handleUpload = async (file: File) => {
-    setIsUploading(true);
-    setError(null);
-    try {
-      await uploadDoc(file);
-      onUploadSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Upload failed');
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) onUpload(file);
   };
 
   return (
-    <div className="w-full">
-      <div 
-        onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors ${
-          isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
-        } ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
+    <div>
+      <div
+        onClick={handleClick}
+        className="border-2 border-dashed border-gray-300 rounded-lg p-8
+                   hover:border-blue-400 transition-colors cursor-pointer
+                   flex flex-col items-center justify-center gap-3"
       >
-        <input 
-          type="file" ref={fileInputRef} onChange={handleChange} 
-          className="hidden" accept=".pdf,.txt,.csv,.md"
-        />
-        <p className="text-gray-600 font-medium">
-          {isUploading ? 'Uploading & Parsing...' : 'Drag & drop a document here, or click to select'}
+        <div className="text-4xl">📄</div>
+        <p className="text-gray-700 text-sm font-medium">
+          {uploading ? "Uploading..." : "Click to upload PDF or TXT"}
         </p>
-        <p className="text-sm text-gray-400 mt-2">Supports PDF, TXT, CSV (Max 10MB)</p>
+        <p className="text-gray-500 text-xs">
+          Documents help ground AI explanations
+        </p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.txt"
+          onChange={handleChange}
+          className="hidden"
+        />
       </div>
-      {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+
+      {error && (
+        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          ⚠ {error}
+        </div>
+      )}
     </div>
   );
 }

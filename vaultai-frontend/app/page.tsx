@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch } from "../lib/backend";
 
 export default function Home() {
   const [status, setStatus] = useState<string>("Loading...");
@@ -26,3 +26,4 @@ export default function Home() {
     </div>
   );
 }
+

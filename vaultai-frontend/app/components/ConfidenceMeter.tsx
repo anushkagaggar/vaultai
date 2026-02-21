@@ -1,32 +1,21 @@
-export default function ConfidenceMeter({ score }: { score: number }) {
-  const percentage = Math.round(score * 100);
-  
-  // Color coding based on your Phase-5 rules
-  let colorClass = 'bg-green-500';
-  let textClass = 'text-green-700';
-  if (score < 0.4) {
-    colorClass = 'bg-red-500';
-    textClass = 'text-red-700';
-  } else if (score < 0.8) {
-    colorClass = 'bg-yellow-500';
-    textClass = 'text-yellow-700';
-  }
+export default function ConfidenceMeter({ value }: { value: number }) {
+  const percent = Math.round(value * 100);
+  const color = value >= 0.7 ? "bg-green-500" : value >= 0.4 ? "bg-yellow-500" : "bg-red-500";
+  const label = value >= 0.7 ? "High" : value >= 0.4 ? "Medium" : "Low";
 
   return (
-    <div className="w-full">
-      <div className="flex justify-between items-center mb-2">
-        <span className={`text-sm font-medium ${textClass}`}>System Confidence</span>
-        <span className={`text-sm font-bold ${textClass}`}>{percentage}%</span>
+    <div className="flex flex-col items-end gap-1 min-w-[80px]">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500">{label}</span>
+        <span className="text-sm font-bold text-gray-900">{percent}%</span>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-2.5">
-        <div 
-          className={`${colorClass} h-2.5 rounded-full transition-all duration-500`} 
-          style={{ width: `${percentage}%` }}
-        ></div>
+      <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div
+          className={`h-full ${color} rounded-full transition-all duration-500`}
+          style={{ width: `${percent}%` }}
+        />
       </div>
-      {score < 0.4 && (
-        <p className="text-xs text-red-600 mt-2">Warning: Degraded confidence. Manual review advised.</p>
-      )}
+      <p className="text-[10px] text-gray-400 uppercase tracking-wide">Trust</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { loginUser, registerUser } from "@/lib/api";
+import { loginUser, registerUser } from "../../lib/backend";
 
 export default function AuthPage() {
   const [email, setEmail] = useState("");
@@ -55,3 +55,4 @@ export default function AuthPage() {
     </div>
   );
 }
+

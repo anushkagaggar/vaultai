@@ -1,39 +1,29 @@
-"use client";
-import { useState } from 'react';
-import { runInsight, getExecution } from '@/lib/api';
-
-export default function RefreshButton({ onComplete }: { onComplete?: () => void }) {
-  const [isPolling, setIsPolling] = useState(false);
-
-  const handleRefresh = async () => {
-    setIsPolling(true);
-    try {
-      const { executionId } = await runInsight();
-      
-      // Polling mechanism
-      const interval = setInterval(async () => {
-        const status = await getExecution(executionId);
-        if (['success', 'fallback', 'failed'].includes(status.status)) {
-          clearInterval(interval);
-          setIsPolling(false);
-          if (onComplete) onComplete();
-        }
-      }, 2000); // Poll every 2 seconds
-    } catch (error) {
-      console.error("Failed to start refresh", error);
-      setIsPolling(false);
-    }
-  };
-
+export function RefreshButton({
+  onClick,
+  loading,
+}: {
+  onClick: () => void;
+  loading: boolean;
+}) {
   return (
-    <button 
-      onClick={handleRefresh} 
-      disabled={isPolling}
-      className={`px-4 py-2 rounded-md text-white font-medium ${
-        isPolling ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-      }`}
+    <button
+      onClick={onClick}
+      disabled={loading}
+      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700
+                 text-white text-sm font-medium rounded-lg transition-colors
+                 disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      {isPolling ? 'Computing...' : 'Recompute Insights'}
+      {loading ? (
+        <>
+          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          Computing...
+        </>
+      ) : (
+        <>
+          <span>↻</span>
+          Refresh Insight
+        </>
+      )}
     </button>
   );
 }

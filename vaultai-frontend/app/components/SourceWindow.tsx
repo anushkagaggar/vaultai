@@ -12,3 +12,4 @@ export default function SourceWindow({ metrics }: { metrics: Record<string, any>
     </div>
   );
 }
+
