@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getRagDocuments, uploadRagDocument} from "../../lib/backend";
+import { uploadRagDocument} from "../../lib/backend";
 import type { RagDocument } from "../../lib/backend";
 import { UploadDropzone } from "../components/UploadDropzone";
 import { EmptyState } from "../components/EmptyState";
@@ -13,30 +13,6 @@ export default function UploadsPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const fetchDocs = async () => {
-    try {
-      console.log("Fetching documents from:", `${process.env.NEXT_PUBLIC_API_URL}/rag/documents`);
-      const data = await getRagDocuments();
-      console.log("Documents response:", data);
-      
-      setDocs(data);
-      setError(null);
-    } catch (error: any) {
-      console.error("Fetch documents error:", error);
-      if (error.message === "unauthorized") {
-        router.push("/auth");
-      } else {
-        setError("Failed to load documents");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDocs();
-  }, []);
 
   const handleUpload = async (file: File) => {
     const allowed = ["application/pdf", "text/plain"];
@@ -51,7 +27,6 @@ export default function UploadsPage() {
     try {
       console.log("Uploading file:", file.name);
       await uploadRagDocument(file);
-      await fetchDocs();
     } catch (error: any) {
       console.error("Upload error:", error);
       if (error.message === "unauthorized") {

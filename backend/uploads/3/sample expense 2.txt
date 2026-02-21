@@ -1,0 +1,22 @@
+====================================================================================================
+MONTHLY EXPENSE LOG: MARCH 2026
+====================================================================================================
+
+DATE        | CATEGORY       | AMOUNT   | DESCRIPTION                    | EXTRA DATA
+------------|----------------|----------|--------------------------------|--------------------------
+2026-03-01  | Housing        | 1200.00  | Monthly Rent                   | Autopay enabled
+2026-03-02  | Food           | 45.50    | Weekly Grocery Run             | Trader Joe's
+2026-03-05  | Utilities      | 85.00    | Electricity Bill               | High usage due to AC
+2026-03-08  | Entertainment  | 15.99    | Streaming Subscription         | Netflix (Standard Plan)
+2026-03-10  | Transport      | 40.00    | Fuel / Gas                     | Shell Station
+2026-03-12  | Shopping       | 120.00   | New Running Shoes              | 20% Discount applied
+2026-03-15  | Food           | 32.40    | Dinner Out                     | Weekend brunch with friends
+2026-03-18  | Health         | 50.00    | Gym Membership                 | Monthly recurring
+2026-03-22  | Education      | 200.00   | Online Course Fee              | Python Backend Certificate
+2026-03-25  | Transport      | 15.00    | Public Transit Pass            | Metro reload
+2026-03-28  | Miscellaneous  | 12.00    | Gift Wrapping                  | For birthday party
+2026-03-31  | Food           | 10.50    | Coffee & Snacks                | Work break
+
+----------------------------------------------------------------------------------------------------
+TOTAL EXPENSES: $1,826.39
+----------------------------------------------------------------------------------------------------

@@ -226,31 +226,6 @@ export async function getSystemMetrics() {
 // ─────────────────────────────────────────────────────────────────────────────
 // V2 RAG Documents API
 // ─────────────────────────────────────────────────────────────────────────────
-
-export async function getRagDocuments() {
-  const res = await fetch(`${API_URL}/rag/documents`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  });
-  
-  const data = await handleResponse(res);
-  
-  // Backend returns array of documents directly
-  // Handle edge cases
-  if (Array.isArray(data)) {
-    return data;
-  }
-  
-  // If wrapped in an object with 'documents' key
-  if (data && typeof data === 'object' && data.documents) {
-    return Array.isArray(data.documents) ? data.documents : [];
-  }
-  
-  // Fallback
-  console.warn("Unexpected documents response format:", data);
-  return [];
-}
-
 export async function uploadRagDocument(file: File) {
   const formData = new FormData();
   formData.append("file", file);
@@ -270,6 +245,35 @@ export async function uploadRagDocument(file: File) {
   
   return handleResponse(res);
 }
+
+export async function getRagDocuments() {
+  const res = await fetch(`${API_URL}/rag/documents`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  });
+  
+  const data = await handleResponse(res);
+  return Array.isArray(data) ? data : [];
+}
+
+export async function deleteRagDocument(docId: number) {
+  const res = await fetch(`${API_URL}/rag/documents/${docId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+  
+  return handleResponse(res);
+}
+
+export async function getDocumentStatus(docId: number) {
+  const res = await fetch(`${API_URL}/rag/documents/${docId}/status`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  });
+  
+  return handleResponse(res);
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TypeScript Types
@@ -322,6 +326,7 @@ export interface RagDocument {
   active: boolean;
   uploaded_at: string;
   version: number;
+  status?: string;
 }
 
 export interface SystemMetrics {
