@@ -39,7 +39,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://vaultaifrontend-czhf8ik0o-anushkas-projects-d6a64224.vercel.app",
+        "https://vaultai-frontend-6fajuj7ea-anushkas-projects-d6a64224.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
