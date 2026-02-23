@@ -19,9 +19,19 @@ export default function InsightsPage() {
 
   const fetchInsight = useCallback(async () => {
     try {
-      console.log("Fetching insight from:", `${process.env.NEXT_PUBLIC_API_URL}/insights/trends`);
+      console.log("=== FETCHING INSIGHT ===");
+      console.log("API URL:", `${process.env.NEXT_PUBLIC_API_URL}/insights/trends`);
+      
       const data = await getInsights();
-      console.log("Insight response:", data);
+      
+      console.log("=== INSIGHT RESPONSE ===");
+      console.log("Status:", data.status);
+      console.log("Degraded:", data.degraded);
+      console.log("Confidence:", data.confidence);
+      console.log("Has data:", !!data.data);
+      console.log("Stable:", data.stable);
+      console.log("Execution required:", data.execution_required);
+      console.log("Full response:", data);
       
       setStatus(data.status);
       setInsight(data.status === "ready" ? data : null);
@@ -43,9 +53,11 @@ export default function InsightsPage() {
       const data = await runInsights();
       console.log("Run insight response:", data);
 
+      // ✅ Check if execution_id exists
       if (data.execution_id) {
         setExecutionId(data.execution_id);
 
+        // ✅ Polling function
         const poll = async () => {
           if (!pollingActive.current) return;
 
@@ -53,11 +65,19 @@ export default function InsightsPage() {
             const execData = await getExecution(data.execution_id);
             console.log("Execution poll:", execData);
 
+            // ✅ Check terminal status
             if (execData.is_terminal) {
+              console.log("Execution completed, refreshing insight...");
               setRefreshing(false);
               setExecutionId(null);
-              fetchInsight();
+              
+              // ✅ Wait a bit for artifact to be created
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              // ✅ Fetch the new insight
+              await fetchInsight();
             } else {
+              console.log("Still running, polling again...");
               setTimeout(poll, 2500);
             }
           } catch (error) {
@@ -66,10 +86,18 @@ export default function InsightsPage() {
           }
         };
 
-        setTimeout(poll, 2500);
-      } else {
+        // ✅ Start polling immediately
+        poll();
+        
+      } else if (data.status === "completed") {
+        // ✅ If already completed, just refresh
+        console.log("Already completed, fetching insight...");
         setRefreshing(false);
-        fetchInsight();
+        await fetchInsight();
+      } else {
+        console.warn("Unexpected response:", data);
+        setRefreshing(false);
+        setStatus("error");
       }
     } catch (error: any) {
       console.error("Run insight error:", error);
@@ -81,13 +109,6 @@ export default function InsightsPage() {
       }
     }
   }, [fetchInsight, router]);
-
-  useEffect(() => {
-    fetchInsight();
-    return () => {
-      pollingActive.current = false;
-    };
-  }, [fetchInsight]);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">

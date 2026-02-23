@@ -6,6 +6,7 @@ from qdrant_client.http.models import (
     FieldCondition,
     MatchValue,
     PointStruct,
+    PayloadSchemaType, 
 )
 
 import uuid
@@ -33,13 +34,36 @@ def get_qdrant_client():
 
 
 def init_collection():
-
+    """Create collection with proper indexes."""
     client = get_qdrant_client()
 
     collections = client.get_collections().collections
     names = [c.name for c in collections]
 
     if COLLECTION_NAME in names:
+        # ✅ Collection exists - ensure indexes are created
+        try:
+            # Create index for user_id if it doesn't exist
+            client.create_payload_index(
+                collection_name=COLLECTION_NAME,
+                field_name="user_id",
+                field_schema=PayloadSchemaType.INTEGER
+            )
+            print(f"Created index for user_id")
+        except Exception as e:
+            # Index might already exist
+            print(f"Index creation skipped or failed: {e}")
+        
+        try:
+            # Create index for active field
+            client.create_payload_index(
+                collection_name=COLLECTION_NAME,
+                field_name="active",
+                field_schema=PayloadSchemaType.BOOL
+            )
+            print(f"Created index for active")
+        except Exception as e:
+            print(f"Index creation skipped or failed: {e}")
         return
 
     client.create_collection(
@@ -50,6 +74,22 @@ def init_collection():
             distance=Distance.COSINE
         )
     )
+     
+    # ✅ Create indexes immediately after collection creation
+    client.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="user_id",
+        field_schema=PayloadSchemaType.INTEGER
+    )
+    
+    client.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="active",
+        field_schema=PayloadSchemaType.BOOL
+    )
+    
+    print(f"Created collection {COLLECTION_NAME} with indexes")
+
 
 
 # --------------------------
