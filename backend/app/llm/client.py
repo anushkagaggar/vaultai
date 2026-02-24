@@ -2,26 +2,23 @@ import os
 import httpx
 from typing import Optional
 
-# ✅ Ollama Cloud Configuration
+# ✅ Try the correct Ollama Cloud endpoint
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
-OLLAMA_BASE_URL = "https://api.ollama.ai/v1"  # Ollama Cloud endpoint
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "https://api.ollama.com/v1")  # Changed from .ai to .com
 
 async def generate_explanation(prompt: str, model: str = "phi3:mini") -> str:
     """
     Generate explanation using Ollama Cloud API.
-    
-    Args:
-        prompt: The prompt to send to the model
-        model: Model name (default: phi3)
-    
-    Returns:
-        Generated text response
     """
     
     if not OLLAMA_API_KEY:
         raise ValueError("OLLAMA_API_KEY not set in environment variables")
     
+    # ✅ Add more detailed error logging
     url = f"{OLLAMA_BASE_URL}/chat/completions"
+    
+    print(f"🔍 Calling Ollama at: {url}")
+    print(f"🔑 API Key present: {bool(OLLAMA_API_KEY)}")
     
     headers = {
         "Authorization": f"Bearer {OLLAMA_API_KEY}",
@@ -41,20 +38,32 @@ async def generate_explanation(prompt: str, model: str = "phi3:mini") -> str:
     
     async with httpx.AsyncClient(timeout=120.0) as client:
         try:
+            print(f"📡 Sending request to Ollama...")
             response = await client.post(url, json=payload, headers=headers)
+            
+            print(f"📥 Response status: {response.status_code}")
+            print(f"📥 Response body: {response.text[:200]}")
+            
             response.raise_for_status()
             
             data = response.json()
             
-            # Extract the response text
             if "choices" in data and len(data["choices"]) > 0:
-                return data["choices"][0]["message"]["content"]
+                result = data["choices"][0]["message"]["content"]
+                print(f"✅ Generated {len(result)} characters")
+                return result
             else:
-                raise ValueError("Unexpected API response format")
+                raise ValueError(f"Unexpected API response format: {data}")
                 
+        except httpx.ConnectError as e:
+            print(f"❌ Connection error: {e}")
+            raise Exception(f"Cannot connect to Ollama API: {str(e)}")
         except httpx.HTTPStatusError as e:
+            print(f"❌ HTTP error: {e.response.status_code}")
+            print(f"❌ Response: {e.response.text}")
             raise Exception(f"Ollama API error: {e.response.status_code} - {e.response.text}")
         except Exception as e:
+            print(f"❌ Unexpected error: {type(e).__name__}: {e}")
             raise Exception(f"Failed to generate explanation: {str(e)}")
 
 
