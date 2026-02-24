@@ -6,7 +6,7 @@ from typing import Optional
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
 OLLAMA_BASE_URL = "https://api.ollama.ai/v1"  # Ollama Cloud endpoint
 
-async def generate_explanation(prompt: str, model: str = "phi3") -> str:
+async def generate_explanation(prompt: str, model: str = "phi3:mini") -> str:
     """
     Generate explanation using Ollama Cloud API.
     
@@ -59,7 +59,7 @@ async def generate_explanation(prompt: str, model: str = "phi3") -> str:
 
 
 # ✅ Optional: Generate with streaming (for future use)
-async def generate_explanation_stream(prompt: str, model: str = "phi3"):
+async def generate_explanation_stream(prompt: str, model: str = "phi3:mini"):
     """
     Generate explanation with streaming.
     Yields chunks of text as they arrive.
