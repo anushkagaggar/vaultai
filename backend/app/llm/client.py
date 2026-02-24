@@ -36,7 +36,11 @@ async def generate_explanation(prompt: str, model: str = "phi3:mini") -> str:
         "stream": False
     }
     
-    async with httpx.AsyncClient(timeout=120.0) as client:
+        # ✅ Enable redirect following
+    async with httpx.AsyncClient(
+        timeout=120.0,
+        follow_redirects=True  # ✅ THIS IS THE FIX
+    ) as client:
         try:
             print(f"📡 Sending request to Ollama...")
             response = await client.post(url, json=payload, headers=headers)
