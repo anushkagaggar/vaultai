@@ -1,124 +1,139 @@
 import os
 import httpx
-from typing import Optional
+import json
+from typing import AsyncIterator
 
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
-OLLAMA_BASE_URL=os.getenv("OLLAMA_BASE_URL", "https://api.ollama.com/v1")
+# ✅ Configuration
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
-async def generate_explanation(prompt: str, model: str = "phi3") -> str:
+# ─────────────────────────────────────────────────────────────────────────────
+# Main Generation Function
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def generate_explanation(prompt: str, model: str = "llama-3.1-8b-instant") -> str:
     """
-    Generate explanation using Ollama Cloud API.
-    """
+    Generate explanation using Groq API (free tier).
     
-    if not OLLAMA_API_KEY:
-        raise ValueError("OLLAMA_API_KEY not set")
-    
-    url = "https://api.ollama.com/v1/chat/completions"
-    
-    print(f"🔍 Calling Ollama at: {url}")
-    print(f"🔑 API Key (first 10 chars): {OLLAMA_API_KEY[:10]}...")
-    
-    # ✅ Try different auth formats
-    headers_variants = [
-        # Format 1: Bearer token (standard)
-        {
-            "Authorization": f"Bearer {OLLAMA_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        # Format 2: X-API-Key header (some APIs use this)
-        {
-            "X-API-Key": OLLAMA_API_KEY,
-            "Content-Type": "application/json",
-        },
-        # Format 3: API-Key header
-        {
-            "API-Key": OLLAMA_API_KEY,
-            "Content-Type": "application/json",
-        },
-        # Format 4: Just the key in Authorization
-        {
-            "Authorization": OLLAMA_API_KEY,
-            "Content-Type": "application/json",
-        },
-    ]
-    
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        "stream": False
-    }
-    
-    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-        
-        # Try each auth format
-        for i, headers in enumerate(headers_variants):
-            try:
-                print(f"📡 Trying auth format #{i+1}...")
-                response = await client.post(url, json=payload, headers=headers)
-                
-                print(f"📥 Response status: {response.status_code}")
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    if "choices" in data and len(data["choices"]) > 0:
-                        result = data["choices"][0]["message"]["content"]
-                        print(f"✅ Success with auth format #{i+1}")
-                        return result
-                else:
-                    print(f"❌ Format #{i+1} failed: {response.text[:100]}")
-                    
-            except Exception as e:
-                print(f"❌ Format #{i+1} error: {e}")
-                continue
-        
-        # If all failed
-        raise Exception("All authentication formats failed. Check API key or endpoint.")
-
-
-# ✅ Optional: Generate with streaming (for future use)
-async def generate_explanation_stream(prompt: str, model: str = "phi3:mini"):
-    """
-    Generate explanation with streaming.
-    Yields chunks of text as they arrive.
+    Available models:
+    - llama-3.1-8b-instant (fast, balanced)
+    - llama-3.1-70b-versatile (best quality)
+    - mixtral-8x7b-32768 (long context)
     """
     
-    if not OLLAMA_API_KEY:
-        raise ValueError("OLLAMA_API_KEY not set")
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY not set in environment variables")
     
-    url = f"{OLLAMA_BASE_URL}/chat/completions"
+    url = f"{GROQ_BASE_URL}/chat/completions"
+    
+    print(f"🔍 Calling Groq with model: {model}")
     
     headers = {
-        "Authorization": f"Bearer {OLLAMA_API_KEY}",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
     
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "stream": True
+        "temperature": 0.7,
+        "max_tokens": 1000
     }
     
     async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-        async with client.stream("POST", url, json=payload, headers=headers) as response:
+        try:
+            print(f"📡 Sending request to Groq...")
+            response = await client.post(url, json=payload, headers=headers)
+            
+            print(f"📥 Response status: {response.status_code}")
+            
             response.raise_for_status()
             
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    chunk = line[6:]  # Remove "data: " prefix
-                    if chunk.strip() == "[DONE]":
-                        break
-                    
-                    try:
-                        import json
-                        data = json.loads(chunk)
-                        if "choices" in data and len(data["choices"]) > 0:
-                            delta = data["choices"][0].get("delta", {})
-                            if "content" in delta:
-                                yield delta["content"]
-                    except json.JSONDecodeError:
-                        continue
+            data = response.json()
+            result = data["choices"][0]["message"]["content"]
+            
+            print(f"✅ Generated {len(result)} characters")
+            return result
+            
+        except httpx.HTTPStatusError as e:
+            print(f"❌ HTTP error: {e.response.status_code}")
+            print(f"❌ Response: {e.response.text}")
+            raise Exception(f"Groq API error: {e.response.status_code} - {e.response.text}")
+        except Exception as e:
+            print(f"❌ Unexpected error: {type(e).__name__}: {e}")
+            raise Exception(f"Failed to generate explanation: {str(e)}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Optional: Streaming Function (for future use)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def generate_explanation_stream(
+    prompt: str, 
+    model: str = "llama-3.1-8b-instant"
+) -> AsyncIterator[str]:
+    """
+    Generate explanation with streaming using Groq API.
+    Yields chunks of text as they arrive.
+    
+    Args:
+        prompt: The prompt to send to the model
+        model: Model name (default: llama-3.1-8b-instant)
+    
+    Yields:
+        Text chunks as they are generated
+    
+    Usage:
+        async for chunk in generate_explanation_stream(prompt):
+            print(chunk, end="", flush=True)
+    """
+    
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY not set")
+    
+    url = f"{GROQ_BASE_URL}/chat/completions"
+    
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "stream": True  # ✅ Enable streaming
+    }
+    
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        try:
+            async with client.stream("POST", url, json=payload, headers=headers) as response:
+                response.raise_for_status()
+                
+                async for line in response.aiter_lines():
+                    # Groq uses Server-Sent Events (SSE) format
+                    if line.startswith("data: "):
+                        chunk = line[6:]  # Remove "data: " prefix
+                        
+                        # Check for stream end
+                        if chunk.strip() == "[DONE]":
+                            break
+                        
+                        try:
+                            data = json.loads(chunk)
+                            
+                            # Extract content from delta
+                            if "choices" in data and len(data["choices"]) > 0:
+                                delta = data["choices"][0].get("delta", {})
+                                if "content" in delta:
+                                    yield delta["content"]
+                                    
+                        except json.JSONDecodeError:
+                            # Skip malformed JSON lines
+                            continue
+                            
+        except httpx.HTTPStatusError as e:
+            raise Exception(f"Groq streaming error: {e.response.status_code} - {e.response.text}")
+        except Exception as e:
+            raise Exception(f"Streaming failed: {str(e)}")
