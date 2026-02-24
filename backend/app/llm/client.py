@@ -2,28 +2,45 @@ import os
 import httpx
 from typing import Optional
 
-# ✅ Try the correct Ollama Cloud endpoint
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "https://api.ollama.com/v1")  # Changed from .ai to .com
+OLLAMA_BASE_URL=os.getenv("OLLAMA_BASE_URL", "https://api.ollama.com/v1")
 
-async def generate_explanation(prompt: str, model: str = "phi3:mini") -> str:
+async def generate_explanation(prompt: str, model: str = "phi3") -> str:
     """
     Generate explanation using Ollama Cloud API.
     """
     
     if not OLLAMA_API_KEY:
-        raise ValueError("OLLAMA_API_KEY not set in environment variables")
+        raise ValueError("OLLAMA_API_KEY not set")
     
-    # ✅ Add more detailed error logging
-    url = f"{OLLAMA_BASE_URL}/chat/completions"
+    url = "https://api.ollama.com/v1/chat/completions"
     
     print(f"🔍 Calling Ollama at: {url}")
-    print(f"🔑 API Key present: {bool(OLLAMA_API_KEY)}")
+    print(f"🔑 API Key (first 10 chars): {OLLAMA_API_KEY[:10]}...")
     
-    headers = {
-        "Authorization": f"Bearer {OLLAMA_API_KEY}",
-        "Content-Type": "application/json",
-    }
+    # ✅ Try different auth formats
+    headers_variants = [
+        # Format 1: Bearer token (standard)
+        {
+            "Authorization": f"Bearer {OLLAMA_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        # Format 2: X-API-Key header (some APIs use this)
+        {
+            "X-API-Key": OLLAMA_API_KEY,
+            "Content-Type": "application/json",
+        },
+        # Format 3: API-Key header
+        {
+            "API-Key": OLLAMA_API_KEY,
+            "Content-Type": "application/json",
+        },
+        # Format 4: Just the key in Authorization
+        {
+            "Authorization": OLLAMA_API_KEY,
+            "Content-Type": "application/json",
+        },
+    ]
     
     payload = {
         "model": model,
@@ -36,39 +53,31 @@ async def generate_explanation(prompt: str, model: str = "phi3:mini") -> str:
         "stream": False
     }
     
-        # ✅ Enable redirect following
-    async with httpx.AsyncClient(
-        timeout=120.0,
-        follow_redirects=True  # ✅ THIS IS THE FIX
-    ) as client:
-        try:
-            print(f"📡 Sending request to Ollama...")
-            response = await client.post(url, json=payload, headers=headers)
-            
-            print(f"📥 Response status: {response.status_code}")
-            print(f"📥 Response body: {response.text[:200]}")
-            
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            if "choices" in data and len(data["choices"]) > 0:
-                result = data["choices"][0]["message"]["content"]
-                print(f"✅ Generated {len(result)} characters")
-                return result
-            else:
-                raise ValueError(f"Unexpected API response format: {data}")
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        
+        # Try each auth format
+        for i, headers in enumerate(headers_variants):
+            try:
+                print(f"📡 Trying auth format #{i+1}...")
+                response = await client.post(url, json=payload, headers=headers)
                 
-        except httpx.ConnectError as e:
-            print(f"❌ Connection error: {e}")
-            raise Exception(f"Cannot connect to Ollama API: {str(e)}")
-        except httpx.HTTPStatusError as e:
-            print(f"❌ HTTP error: {e.response.status_code}")
-            print(f"❌ Response: {e.response.text}")
-            raise Exception(f"Ollama API error: {e.response.status_code} - {e.response.text}")
-        except Exception as e:
-            print(f"❌ Unexpected error: {type(e).__name__}: {e}")
-            raise Exception(f"Failed to generate explanation: {str(e)}")
+                print(f"📥 Response status: {response.status_code}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if "choices" in data and len(data["choices"]) > 0:
+                        result = data["choices"][0]["message"]["content"]
+                        print(f"✅ Success with auth format #{i+1}")
+                        return result
+                else:
+                    print(f"❌ Format #{i+1} failed: {response.text[:100]}")
+                    
+            except Exception as e:
+                print(f"❌ Format #{i+1} error: {e}")
+                continue
+        
+        # If all failed
+        raise Exception("All authentication formats failed. Check API key or endpoint.")
 
 
 # ✅ Optional: Generate with streaming (for future use)
@@ -94,7 +103,7 @@ async def generate_explanation_stream(prompt: str, model: str = "phi3:mini"):
         "stream": True
     }
     
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
         async with client.stream("POST", url, json=payload, headers=headers) as response:
             response.raise_for_status()
             
