@@ -32,3 +32,5 @@ out/
 # Build
 dist/
 build/
+
+backend/uploads/
