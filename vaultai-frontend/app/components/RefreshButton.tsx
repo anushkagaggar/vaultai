@@ -1,3 +1,5 @@
+"use client";
+
 export function RefreshButton({
   onClick,
   loading,
@@ -9,21 +11,52 @@ export function RefreshButton({
     <button
       onClick={onClick}
       disabled={loading}
-      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700
-                 text-white text-sm font-medium rounded-lg transition-colors
-                 disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 16px",
+        borderRadius: 8,
+        fontSize: 14,
+        fontWeight: 500,
+        color: "white",
+        background: loading ? "#4B5563" : "#6366F1",
+        border: "none",
+        cursor: loading ? "not-allowed" : "pointer",
+        opacity: loading ? 0.7 : 1,
+        transition: "all 0.15s ease",
+      }}
+      onMouseEnter={(e) => {
+        if (!loading)
+          (e.currentTarget as HTMLButtonElement).style.background = "#818CF8";
+      }}
+      onMouseLeave={(e) => {
+        if (!loading)
+          (e.currentTarget as HTMLButtonElement).style.background = "#6366F1";
+      }}
     >
       {loading ? (
         <>
-          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          <span
+            style={{
+              width: 14,
+              height: 14,
+              border: "2px solid rgba(255,255,255,0.3)",
+              borderTop: "2px solid white",
+              borderRadius: "50%",
+              display: "inline-block",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
           Computing...
         </>
       ) : (
         <>
-          <span>↻</span>
+          <span style={{ fontSize: 14 }}>↻</span>
           Refresh Insight
         </>
       )}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </button>
   );
 }

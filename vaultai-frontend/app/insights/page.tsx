@@ -8,6 +8,7 @@ import InsightCard from "../components/InsightCard";
 import { RefreshButton } from "../components/RefreshButton";
 import { EmptyState } from "../components/EmptyState";
 import { ExecutionTimeline } from "../components/ExecutionTimeline";
+import AuthenticatedLayout from "../components/Authenticatedlayout";
 
 export default function InsightsPage() {
   const router = useRouter();
@@ -110,51 +111,91 @@ export default function InsightsPage() {
     }
   }, [fetchInsight, router]);
 
-  return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Spending Intelligence</h1>
-          <p className="text-sm text-gray-600 mt-1">AI-powered financial analysis</p>
-        </div>
-        <RefreshButton onClick={handleRefresh} loading={refreshing} />
-      </div>
+  useEffect(() => {
+    fetchInsight();
+    return () => { pollingActive.current = false; };
+  }, [fetchInsight]);
 
-      {refreshing && <ExecutionTimeline status="running" executionId={executionId} />}
+  // ── UI ────────────────────────────────────────────────────────────
+  return (
+    <AuthenticatedLayout
+      title="Spending Intelligence"
+      action={<RefreshButton onClick={handleRefresh} loading={refreshing} />}
+    >
+      {/* Execution timeline while refreshing */}
+      {refreshing && (
+        <ExecutionTimeline status="running" executionId={executionId} />
+      )}
 
       {status === "stale" && !refreshing && (
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
-          ⚠️ Data changed. Click Refresh for updated insights.
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 16px",
+            background: "rgba(245,158,11,0.08)",
+            border: "1px solid rgba(245,158,11,0.2)",
+            borderRadius: 10,
+            fontSize: 13,
+            color: "#F59E0B",
+          }}
+        >
+          ⚠ Your expense data changed. Click Refresh for updated insights.
         </div>
       )}
 
+      {/* Error banner */}
       {status === "error" && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          ⚠️ Failed to load. Please try again.
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 16px",
+            background: "rgba(239,68,68,0.08)",
+            border: "1px solid rgba(239,68,68,0.2)",
+            borderRadius: 10,
+            fontSize: 13,
+            color: "#EF4444",
+          }}
+        >
+          ⚠ Failed to load insights. Please try again.
         </div>
       )}
 
+      {/* Loading skeleton */}
       {status === "loading" && (
-        <div className="bg-white rounded-lg border p-6 animate-pulse">
-          <div className="flex justify-between mb-4">
-            <div className="space-y-2">
-              <div className="h-4 w-36 bg-gray-200 rounded" />
-              <div className="h-3 w-24 bg-gray-200 rounded" />
+        <div
+          style={{
+            background: "#1A1D27",
+            border: "1px solid #2E3248",
+            borderRadius: 14,
+            padding: 24,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+            <div>
+              <div style={{ height: 16, width: 160, background: "#22263A", borderRadius: 6, marginBottom: 8 }} />
+              <div style={{ height: 12, width: 100, background: "#22263A", borderRadius: 6 }} />
             </div>
-            <div className="w-16 h-16 bg-gray-200 rounded-full" />
+            <div style={{ width: 80, height: 60, background: "#22263A", borderRadius: 10 }} />
           </div>
-          <div className="h-20 bg-gray-200 rounded mb-4" />
+          <div style={{ height: 80, background: "#22263A", borderRadius: 10, marginBottom: 16 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
+            {[1,2,3,4].map((i) => (
+              <div key={i} style={{ height: 64, background: "#22263A", borderRadius: 10 }} />
+            ))}
+          </div>
         </div>
       )}
 
+      {/* Empty state */}
       {status === "unavailable" && !refreshing && (
         <EmptyState
           title="No insights yet"
-          description="Add expenses and generate your first insight."
+          description="Add some expenses and generate your first AI insight."
           action={{ label: "Generate Insight", onClick: handleRefresh, loading: refreshing }}
         />
       )}
 
+      {/* Insight card */}
       {insight && insight.data && (
         <InsightCard
           insight={{
@@ -166,6 +207,6 @@ export default function InsightsPage() {
           }}
         />
       )}
-    </div>
+    </AuthenticatedLayout>
   );
 }

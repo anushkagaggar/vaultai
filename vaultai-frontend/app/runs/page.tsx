@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSystemMetrics } from "../../lib/backend";
 import type { SystemMetrics } from "../../lib/backend";
+import AuthenticatedLayout from "../components/Authenticatedlayout";
 
 export default function RunsPage() {
   const router = useRouter();
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ── ALL original logic kept ───────────────────────────────────────
   useEffect(() => {
     const fetch_ = async () => {
       try {
@@ -24,110 +26,84 @@ export default function RunsPage() {
     fetch_();
   }, [router]);
 
+  // ── UI ────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500 text-sm">Loading metrics...</div>
-      </div>
+      <AuthenticatedLayout title="Execution Monitor">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200 }}>
+          <span style={{ fontSize: 13, color: "#475569" }}>Loading metrics...</span>
+        </div>
+      </AuthenticatedLayout>
     );
   }
 
   if (!metrics) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <p className="text-gray-600">Failed to load metrics.</p>
-      </div>
+      <AuthenticatedLayout title="Execution Monitor">
+        <p style={{ color: "#EF4444", fontSize: 14 }}>Failed to load metrics.</p>
+      </AuthenticatedLayout>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Execution Monitor</h1>
+    <AuthenticatedLayout title="Execution Monitor">
 
-      <div className="grid grid-cols-4 gap-4">
-        <StatBox label="Total" value={metrics.executions.total} />
-        <StatBox label="Success" value={metrics.executions.success} color="green" />
-        <StatBox label="Fallback" value={metrics.executions.fallback} color="yellow" />
-        <StatBox label="Failed" value={metrics.executions.failed} color="red" />
+      {/* Execution counts */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
+        {[
+          { label: "Total",    value: metrics.executions.total,    color: "#6366F1", bg: "rgba(99,102,241,0.08)",   border: "rgba(99,102,241,0.2)" },
+          { label: "Success",  value: metrics.executions.success,  color: "#22C55E", bg: "rgba(34,197,94,0.08)",   border: "rgba(34,197,94,0.2)" },
+          { label: "Fallback", value: metrics.executions.fallback, color: "#F59E0B", bg: "rgba(245,158,11,0.08)",  border: "rgba(245,158,11,0.2)" },
+          { label: "Failed",   value: metrics.executions.failed,   color: "#EF4444", bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.2)" },
+        ].map(({ label, value, color, bg, border }) => (
+          <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 12, padding: "16px 20px" }}>
+            <p style={{ fontSize: 11, color, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{label}</p>
+            <p style={{ fontSize: 28, fontWeight: 700, color, margin: 0, fontFamily: "monospace" }}>{value}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="rounded-lg border p-5 bg-white">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">System Rates</h2>
-        <div className="space-y-3">
-          <RateRow label="Success Rate" value={metrics.rates.success_rate} color="green" />
-          <RateRow label="Fallback Rate" value={metrics.rates.fallback_rate} color="yellow" />
-          <RateRow label="Cache Hit Rate" value={metrics.rates.cache_hit_rate} color="blue" />
+      {/* System Rates */}
+      <div style={{ background: "#1A1D27", border: "1px solid #2E3248", borderRadius: 12, padding: "20px 24px", marginBottom: 16 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 16px" }}>System Rates</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {[
+            { label: "Success Rate",   value: metrics.rates.success_rate,   color: "#22C55E" },
+            { label: "Fallback Rate",  value: metrics.rates.fallback_rate,  color: "#F59E0B" },
+            { label: "Cache Hit Rate", value: metrics.rates.cache_hit_rate, color: "#6366F1" },
+          ].map(({ label, value, color }) => {
+            const pct = Math.round(value * 100);
+            return (
+              <div key={label}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, color: "#94A3B8" }}>{label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color, fontFamily: "monospace" }}>{pct}%</span>
+                </div>
+                <div style={{ height: 6, background: "#22263A", borderRadius: 99, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 99, transition: "width 0.6s ease" }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      <div className="rounded-lg border p-5 bg-white">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Performance</h2>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-600">Avg Execution Time</span>
-            <span className="font-semibold text-gray-900">
-              {metrics.performance.avg_execution_time_seconds}s
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Total Artifacts</span>
-            <span className="font-semibold text-gray-900">{metrics.artifacts.total}</span>
-          </div>
+      {/* Performance */}
+      <div style={{ background: "#1A1D27", border: "1px solid #2E3248", borderRadius: 12, padding: "20px 24px" }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 16px" }}>Performance</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          {[
+            { label: "Avg Execution Time", value: `${metrics.performance.avg_execution_time_seconds}s` },
+            { label: "Total Artifacts",    value: String(metrics.artifacts.total) },
+          ].map(({ label, value }) => (
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #2E3248" }}>
+              <span style={{ fontSize: 13, color: "#94A3B8" }}>{label}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#F1F5F9", fontFamily: "monospace" }}>{value}</span>
+            </div>
+          ))}
         </div>
       </div>
-    </div>
-  );
-}
 
-function StatBox({
-  label,
-  value,
-  color = "gray",
-}: {
-  label: string;
-  value: number;
-  color?: "green" | "yellow" | "red" | "gray";
-}) {
-  const colors = {
-    green: "text-green-700 bg-green-50 border-green-200",
-    yellow: "text-yellow-700 bg-yellow-50 border-yellow-200",
-    red: "text-red-700 bg-red-50 border-red-200",
-    gray: "text-gray-700 bg-gray-50 border-gray-200",
-  };
-
-  return (
-    <div className={`rounded-lg border p-4 ${colors[color]}`}>
-      <p className="text-xs font-medium mb-1 opacity-70">{label}</p>
-      <p className="text-2xl font-bold">{value}</p>
-    </div>
-  );
-}
-
-function RateRow({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color: "green" | "yellow" | "blue";
-}) {
-  const percent = Math.round(value * 100);
-  const barColor = {
-    green: "bg-green-500",
-    yellow: "bg-yellow-500",
-    blue: "bg-blue-500",
-  }[color];
-
-  return (
-    <div>
-      <div className="flex justify-between text-sm mb-1">
-        <span className="text-gray-600">{label}</span>
-        <span className="font-medium text-gray-900">{percent}%</span>
-      </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full ${barColor} rounded-full`} style={{ width: `${percent}%` }} />
-      </div>
-    </div>
+    </AuthenticatedLayout>
   );
 }

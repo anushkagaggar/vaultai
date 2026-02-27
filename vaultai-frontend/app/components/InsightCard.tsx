@@ -1,8 +1,7 @@
-// app/components/InsightCard.tsx
 import Link from "next/link";
 import ConfidenceMeter from "./ConfidenceMeter";
-import {StatusBadge} from "./StatusBadge";
-import {ExplanationBlock} from "./ExplanationBlock";
+import { StatusBadge } from "./StatusBadge";
+import { ExplanationBlock } from "./ExplanationBlock";
 
 interface InsightCardProps {
   insight: {
@@ -24,9 +23,9 @@ interface InsightCardProps {
 }
 
 function fmt(n: number) {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "USD",
+    currency: "INR",
     maximumFractionDigits: 0,
   }).format(n);
 }
@@ -41,32 +40,49 @@ function relativeTime(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+const CATEGORY_COLORS: Record<string, string> = {
+  food:          "#F97316",
+  transport:     "#3B82F6",
+  shopping:      "#EC4899",
+  utilities:     "#8B5CF6",
+  health:        "#10B981",
+  entertainment: "#F59E0B",
+  other:         "#6B7280",
+};
+
+function getCategoryColor(cat: string) {
+  return CATEGORY_COLORS[cat.toLowerCase()] ?? "#6B7280";
+}
+
 export default function InsightCard({ insight }: InsightCardProps) {
   const { confidence, degraded, data, artifact_id, created_at } = insight;
   const metrics = data?.metrics;
-  const isLowConfidence = confidence < 0.4;
+  const change = metrics?.monthly.percent_change ?? 0;
+  const isPositive = change > 0;
 
   return (
     <div
-      className={`rounded-lg border p-6 transition-all ${
-        isLowConfidence
-          ? "opacity-60 border-gray-300 bg-gray-50"
-          : degraded
-          ? "border-yellow-300 bg-yellow-50"
-          : "border-blue-200 bg-white shadow-sm hover:shadow-md"
-      }`}
+      style={{
+        background: "#1A1D27",
+        border: degraded
+          ? "1px solid rgba(245,158,11,0.3)"
+          : "1px solid #2E3248",
+        borderRadius: 14,
+        padding: 24,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.15)",
+      }}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-lg font-semibold text-gray-900">
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, color: "#F1F5F9", margin: 0 }}>
               Spending Trends
             </h2>
             <StatusBadge degraded={degraded} confidence={confidence} />
           </div>
           {created_at && (
-            <p className="text-xs text-gray-500">
+            <p style={{ fontSize: 12, color: "#475569", margin: 0 }}>
               {relativeTime(created_at)}
             </p>
           )}
@@ -75,66 +91,111 @@ export default function InsightCard({ insight }: InsightCardProps) {
       </div>
 
       {/* Explanation */}
-      <div className="mb-4">
-        <ExplanationBlock
-          summary={data?.summary || null}
-          degraded={degraded}
-        />
+      <div style={{ marginBottom: 20 }}>
+        <ExplanationBlock summary={data?.summary ?? null} degraded={degraded} />
       </div>
 
-      {/* Metrics Grid */}
+      {/* Divider */}
+      <div style={{ height: 1, background: "#2E3248", marginBottom: 20 }} />
+
+      {/* Metrics grid */}
       {metrics && (
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          <MetricBox
-            label="30d Avg"
-            value={fmt(metrics.rolling["30_day_avg"])}
-          />
-          <MetricBox
-            label="This Month"
-            value={fmt(metrics.monthly.current_month)}
-          />
-          <MetricBox
-            label="Change"
-            value={`${metrics.monthly.percent_change > 0 ? "+" : ""}${metrics.monthly.percent_change}%`}
-            highlight
-          />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          {[
+            { label: "30-Day Avg",   value: fmt(metrics.rolling["30_day_avg"]) },
+            { label: "60-Day Avg",   value: fmt(metrics.rolling["60_day_avg"]) },
+            { label: "90-Day Avg",   value: fmt(metrics.rolling["90_day_avg"]) },
+            {
+              label: "Month Change",
+              value: `${isPositive ? "+" : ""}${change}%`,
+              accent: isPositive ? "#EF4444" : "#22C55E",
+            },
+          ].map(({ label, value, accent }) => (
+            <div
+              key={label}
+              style={{
+                background: "#22263A",
+                border: "1px solid #2E3248",
+                borderRadius: 10,
+                padding: "12px 14px",
+              }}
+            >
+              <p style={{ fontSize: 11, color: "#475569", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {label}
+              </p>
+              <p
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: accent ?? "#F1F5F9",
+                  margin: 0,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              >
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Category bars */}
+      {metrics?.categories && metrics.categories.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+            Category Breakdown
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {metrics.categories.slice(0, 5).map((cat) => {
+              const max = Math.max(...metrics.categories.map((c) => c.total));
+              const pct = Math.round((cat.total / max) * 100);
+              const color = getCategoryColor(cat.category);
+              return (
+                <div key={cat.category}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ fontSize: 13, color: "#94A3B8", textTransform: "capitalize" }}>
+                      {cat.category}
+                    </span>
+                    <span style={{ fontSize: 12, color: "#475569", fontFamily: "monospace" }}>
+                      {fmt(cat.total)}
+                    </span>
+                  </div>
+                  <div style={{ height: 5, background: "#22263A", borderRadius: 99, overflow: "hidden" }}>
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${pct}%`,
+                        background: color,
+                        borderRadius: 99,
+                        transition: "width 0.6s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Footer */}
       {artifact_id && (
-        <div className="pt-4 border-t border-gray-200">
+        <div style={{ paddingTop: 16, borderTop: "1px solid #2E3248" }}>
           <Link
             href={`/insights/${artifact_id}`}
-            className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
+            style={{ fontSize: 14, color: "#6366F1", textDecoration: "none", fontWeight: 500 }}
           >
             View full reasoning →
           </Link>
         </div>
       )}
-    </div>
-  );
-}
-
-function MetricBox({
-  label,
-  value,
-  highlight = false,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div className="bg-gray-50 rounded p-3">
-      <p className="text-xs text-gray-600 mb-1">{label}</p>
-      <p
-        className={`text-sm font-semibold ${
-          highlight ? "text-blue-700" : "text-gray-900"
-        }`}
-      >
-        {value}
-      </p>
     </div>
   );
 }

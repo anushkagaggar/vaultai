@@ -8,18 +8,69 @@ export function EmptyState({
   action?: { label: string; onClick: () => void; loading?: boolean };
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-        <span className="text-3xl text-gray-400">◎</span>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "60px 20px",
+        textAlign: "center",
+      }}
+    >
+      <div
+        style={{
+          width: 56,
+          height: 56,
+          background: "#22263A",
+          border: "1px solid #2E3248",
+          borderRadius: "50%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 20,
+          fontSize: 24,
+          color: "#475569",
+        }}
+      >
+        ◎
       </div>
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
-      <p className="text-sm text-gray-600 max-w-md mb-4">{description}</p>
+      <h3
+        style={{
+          fontSize: 16,
+          fontWeight: 600,
+          color: "#F1F5F9",
+          margin: "0 0 8px",
+        }}
+      >
+        {title}
+      </h3>
+      <p
+        style={{
+          fontSize: 14,
+          color: "#94A3B8",
+          margin: "0 0 24px",
+          maxWidth: 340,
+          lineHeight: 1.6,
+        }}
+      >
+        {description}
+      </p>
       {action && (
         <button
           onClick={action.onClick}
           disabled={action.loading}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm
-                     font-medium rounded-lg disabled:opacity-50"
+          style={{
+            padding: "9px 20px",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 500,
+            color: "white",
+            background: "#6366F1",
+            border: "none",
+            cursor: action.loading ? "not-allowed" : "pointer",
+            opacity: action.loading ? 0.6 : 1,
+          }}
         >
           {action.loading ? "Loading..." : action.label}
         </button>
