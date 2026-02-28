@@ -202,7 +202,7 @@ def _route_after_sim_validate(state: VaultAIState) -> str:
 
 # ── Budget subgraph ─────────────────────────────────────────────────────────
 
-def budget_load_v2(state: VaultAIState) -> VaultAIState:
+async def budget_load_v2(state: VaultAIState) -> VaultAIState:
     """
     STUB — Phase 2 implementation in agents/budget/nodes.py
     Loads V2 analytics and expense records for this user.
@@ -237,7 +237,7 @@ def budget_validate(state: VaultAIState) -> VaultAIState:
     return {**state, "graph_trace": trace}
 
 
-def budget_explain(state: VaultAIState) -> VaultAIState:
+async def budget_explain(state: VaultAIState) -> VaultAIState:
     """
     STUB — Phase 2 implementation in agents/budget/nodes.py
     Calls Groq LLM. Narrates projected_outcomes only — never derives numbers.
@@ -273,7 +273,7 @@ def budget_fallback(state: VaultAIState) -> VaultAIState:
 
 # ── Invest subgraph ─────────────────────────────────────────────────────────
 
-def invest_fetch_data(state: VaultAIState) -> VaultAIState:
+async def invest_fetch_data(state: VaultAIState) -> VaultAIState:
     """
     STUB — Phase 3 implementation in agents/invest/nodes.py
     Loads V2 analytics AND fetches external market data (Alpha Vantage / FRED).
@@ -310,7 +310,7 @@ def invest_validate(state: VaultAIState) -> VaultAIState:
     return {**state, "graph_trace": trace}
 
 
-def invest_explain(state: VaultAIState) -> VaultAIState:
+async def invest_explain(state: VaultAIState) -> VaultAIState:
     """
     STUB — Phase 3 implementation in agents/invest/nodes.py
     LLM narrates allocation rationale. Receives percentages + risk-free rate only.
@@ -384,7 +384,7 @@ def goal_validate(state: VaultAIState) -> VaultAIState:
     return {**state, "graph_trace": trace}
 
 
-def goal_explain(state: VaultAIState) -> VaultAIState:
+async def goal_explain(state: VaultAIState) -> VaultAIState:
     """
     STUB — Phase 4 implementation in agents/goal/nodes.py
     LLM narrates the goal feasibility result and timeline.
@@ -454,7 +454,7 @@ def sim_fallback(state: VaultAIState) -> VaultAIState:
 
 # ── Shared terminal nodes ───────────────────────────────────────────────────
 
-def plan_persist(state: VaultAIState) -> VaultAIState:
+async def plan_persist(state: VaultAIState) -> VaultAIState:
     """
     STUB — Phase 2 implementation in plans/service.py
     The ONLY node that writes to the database.
@@ -644,7 +644,9 @@ def compile_graph():
     at request time.
 
     Returns:
-        A compiled LangGraph CompiledGraph ready for .invoke() calls.
+        A compiled LangGraph CompiledGraph. Use await graph.ainvoke(state)
+        from async FastAPI route handlers — NOT graph.invoke().
+        graph.invoke() is only safe in sync test scripts.
 
     Raises:
         Any exception from StateGraph.compile() if the graph is
