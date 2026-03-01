@@ -117,7 +117,7 @@ class ConfidenceBlock(BaseModel):
 
 
 class BudgetPlanResponse(BaseModel):
-    plan_id:              Optional[str]
+    plan_id:              Optional[int]
     plan_type:            str
     projected_outcomes:   Optional[dict]
     explanation:          Optional[str]
@@ -180,7 +180,6 @@ async def create_budget_plan(
         request_params = {
             "_plan_type":         PlanType.BUDGET.value,   # bypass intent_classifier
             "_v2_analytics":      v2_analytics,            # pre-fetched above
-            "_db":                db,
             "income_monthly":     body.income_monthly,
             "savings_target_pct": body.savings_target_pct,
             "fixed_categories":   body.fixed_categories,
@@ -191,7 +190,7 @@ async def create_budget_plan(
     try:
         result = await _graph.ainvoke(
             initial_state,
-            config={"configurable": {"thread_id": user_id}},
+            config={"configurable": {"thread_id": user_id, "db":db,}},
         )
     except ValueError as exc:
         # income_monthly missing or zero — user error

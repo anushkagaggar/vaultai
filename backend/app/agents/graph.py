@@ -26,6 +26,7 @@ import logging
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.runnables import RunnableConfig
 
 from app.agents.router_node import intent_classifier_node
 from app.agents.State import (
@@ -182,31 +183,21 @@ def sim_fallback(state: VaultAIState) -> VaultAIState:
 # SHARED TERMINAL NODES
 # ===========================================================================
 
-async def plan_persist(state: VaultAIState) -> VaultAIState:
-    """
-    The ONLY node that writes to the database.
-
-    The AsyncSession is NOT created here. It is extracted from
-    state["request_params"]["_db"] — injected there by the route handler
-    via Depends(get_db). This keeps the session lifecycle owned by FastAPI,
-    not by the graph.
-
-    If _db is absent (unit tests without DB), logs a warning and returns
-    plan_id=None — the graph still completes cleanly with full plan data.
-    """
+async def plan_persist(state: VaultAIState, config: RunnableConfig) -> VaultAIState:
     trace = append_trace(state, "plan_persist")
-    db    = (state.get("request_params") or {}).get("_db")
+
+    # db comes from config["configurable"]["db"], not from state
+    db = (config.get("configurable") or {}).get("db")
 
     if db is None:
         logger.warning(
-            "plan_persist: _db not in request_params — skipping DB write. "
+            "plan_persist: no db in config — skipping DB write. "
             "plan_id will be None. Expected in unit tests only."
         )
         return {**state, "graph_trace": trace, "plan_id": None}
 
     from app.plans.service import persist_plan
     result = await persist_plan(state, db)
-
     return {**state, **result, "graph_trace": trace}
 
 
