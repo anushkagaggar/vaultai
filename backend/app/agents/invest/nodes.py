@@ -243,7 +243,7 @@ async def invest_fetch_data(state: VaultAIState) -> VaultAIState:
         "external_data":     external_data,
         "external_freshness": ExternalFreshness.FALLBACK,
         "graph_trace":       trace,
-        "audit_payload":     {**existing_payload, "invest_load_metrics": load_metrics},
+        "audit_payload":     {**existing_payload, "v2_load_metrics": load_metrics},
         "degraded":          True,   # FALLBACK external data always sets degraded
     }
 

@@ -253,6 +253,7 @@ async def goal_define(state: VaultAIState) -> VaultAIState:
         "graph_trace":   trace,
         "audit_payload": {
             **existing_payload,
+            "v2_load_metrics": {"data_days_available": 90},
             "goal_params": {
                 "goal_type":      goal_type,
                 "target_amount":  float(target_amount),
