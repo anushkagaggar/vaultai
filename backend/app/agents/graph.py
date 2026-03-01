@@ -1,21 +1,20 @@
 """
 VaultAI V3 — agents/graph.py
 ==============================
-The complete LangGraph StateGraph definition.
 
-PHASE 3 STATUS
---------------
-Budget subgraph: FULLY WIRED — real implementations from agents/budget/nodes.py.
-All other subgraphs remain stubbed with correct topology.
+PHASE STATUS
+------------
+Budget subgraph : LIVE — agents/budget/nodes.py
+Invest subgraph : LIVE — agents/invest/nodes.py
+Goal   subgraph : LIVE — agents/goal/nodes.py
+Simulate        : STUBBED — Phase 5
 
-INVOCATION — always use ainvoke from async route handlers:
+INVOCATION — always ainvoke from async route handlers:
 
     result = await app_graph.ainvoke(
         state,
-        config={"configurable": {"thread_id": user_id}},
+        config={"configurable": {"thread_id": user_id, "db": db}},
     )
-
-graph.invoke() is only safe in sync unit tests that never reach an async node.
 
 Author: VaultAI V3
 """
@@ -24,9 +23,9 @@ from __future__ import annotations
 
 import logging
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
-from langchain_core.runnables import RunnableConfig
 
 from app.agents.router_node import intent_classifier_node
 from app.agents.State import (
@@ -37,7 +36,7 @@ from app.agents.State import (
     mark_degraded,
 )
 
-# Budget subgraph — real implementations from agents/budget/nodes.py
+# ── Real node implementations ────────────────────────────────────────────────
 from app.agents.budget.nodes import (
     budget_load_v2,
     budget_optimize,
@@ -45,6 +44,22 @@ from app.agents.budget.nodes import (
     budget_explain,
     budget_filter,
     budget_fallback,
+)
+from app.agents.invest.nodes import (
+    invest_fetch_data,
+    invest_allocate,
+    invest_validate,
+    invest_explain,
+    invest_filter,
+    invest_fallback,
+)
+from app.agents.goal.nodes import (
+    goal_define,
+    goal_simulate,
+    goal_validate,
+    goal_explain,
+    goal_filter,
+    goal_fallback,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,116 +80,48 @@ def _route_by_intent(state: VaultAIState) -> str:
     elif plan_type == PlanType.SIMULATE:
         return "sim_run"
     elif plan_type == PlanType.COMBINED:
-        return "budget_load_v2"   # Phase 5 will replace
+        return "budget_load_v2"   # Phase 5
     else:
         return "clarify"
 
 
 def _route_after_budget_validate(state: VaultAIState) -> str:
-    if state.get("validation_status") == ValidationStatus.PASSED:
-        return "budget_explain"
-    return "budget_fallback"
+    return "budget_explain" if state.get("validation_status") == ValidationStatus.PASSED \
+        else "budget_fallback"
 
 
 def _route_after_invest_validate(state: VaultAIState) -> str:
-    if state.get("validation_status") == ValidationStatus.PASSED:
-        return "invest_explain"
-    return "invest_fallback"
+    return "invest_explain" if state.get("validation_status") == ValidationStatus.PASSED \
+        else "invest_fallback"
 
 
 def _route_after_goal_validate(state: VaultAIState) -> str:
-    if state.get("validation_status") == ValidationStatus.PASSED:
-        return "goal_explain"
-    return "goal_fallback"
+    return "goal_explain" if state.get("validation_status") == ValidationStatus.PASSED \
+        else "goal_fallback"
 
 
 def _route_after_sim_validate(state: VaultAIState) -> str:
-    if state.get("validation_status") == ValidationStatus.PASSED:
-        return "plan_persist"
-    return "sim_fallback"
+    return "plan_persist" if state.get("validation_status") == ValidationStatus.PASSED \
+        else "sim_fallback"
 
 
 # ===========================================================================
-# STUB NODES — invest / goal / simulate
+# SIMULATE STUBS — Phase 5
 # ===========================================================================
-
-async def invest_fetch_data(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 4 — loads V2 analytics + external market data."""
-    trace = append_trace(state, "invest_fetch_data")
-    return {**state, "graph_trace": trace}
-
-def invest_allocate(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 4 — deterministic risk-tolerance allocation template."""
-    trace = append_trace(state, "invest_allocate")
-    return {**state, "graph_trace": trace}
-
-def invest_validate(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 4 — asserts allocations sum to 100%."""
-    trace = append_trace(state, "invest_validate")
-    return {**state, "graph_trace": trace,
-            "validation_status": ValidationStatus.PASSED}
-
-async def invest_explain(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 4 — LLM narrates allocation rationale."""
-    trace = append_trace(state, "invest_explain")
-    return {**state, "graph_trace": trace}
-
-def invest_filter(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 4 — scrubs predicted returns from LLM output."""
-    trace = append_trace(state, "invest_filter")
-    return {**state, "graph_trace": trace}
-
-def invest_fallback(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 4 — deterministic allocation summary."""
-    trace = append_trace(state, "invest_fallback")
-    return {**state, "graph_trace": trace}
-
-
-def goal_define(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 5 — parses goal type/params, loads V2 data."""
-    trace = append_trace(state, "goal_define")
-    return {**state, "graph_trace": trace}
-
-def goal_simulate(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 5 — calls forecast.goal_feasibility()."""
-    trace = append_trace(state, "goal_simulate")
-    return {**state, "graph_trace": trace}
-
-def goal_validate(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 5 — re-runs goal_feasibility, asserts label matches."""
-    trace = append_trace(state, "goal_validate")
-    return {**state, "graph_trace": trace,
-            "validation_status": ValidationStatus.PASSED}
-
-async def goal_explain(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 5 — LLM narrates goal feasibility."""
-    trace = append_trace(state, "goal_explain")
-    return {**state, "graph_trace": trace}
-
-def goal_filter(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 5 — scrubs speculative language."""
-    trace = append_trace(state, "goal_filter")
-    return {**state, "graph_trace": trace}
-
-def goal_fallback(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 5 — deterministic feasibility summary."""
-    trace = append_trace(state, "goal_fallback")
-    return {**state, "graph_trace": trace}
-
 
 def sim_run(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 5 — calls scenarios.build_scenario()."""
+    """STUB Phase 5."""
     trace = append_trace(state, "sim_run")
     return {**state, "graph_trace": trace}
 
 def sim_validate(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 5 — re-runs build_scenario, asserts final_balance matches."""
+    """STUB Phase 5."""
     trace = append_trace(state, "sim_validate")
     return {**state, "graph_trace": trace,
             "validation_status": ValidationStatus.PASSED}
 
 def sim_fallback(state: VaultAIState) -> VaultAIState:
-    """STUB Phase 5 — marks degraded, passes raw numbers through."""
+    """STUB Phase 5."""
     trace = append_trace(state, "sim_fallback")
     return {**state, "graph_trace": trace}
 
@@ -184,15 +131,19 @@ def sim_fallback(state: VaultAIState) -> VaultAIState:
 # ===========================================================================
 
 async def plan_persist(state: VaultAIState, config: RunnableConfig) -> VaultAIState:
-    trace = append_trace(state, "plan_persist")
+    """
+    The ONLY node that writes to the database.
 
-    # db comes from config["configurable"]["db"], not from state
-    db = (config.get("configurable") or {}).get("db")
+    AsyncSession comes from config["configurable"]["db"] — injected by the
+    route handler. Never stored in state to avoid msgpack serialisation errors.
+    """
+    trace = append_trace(state, "plan_persist")
+    db    = (config.get("configurable") or {}).get("db")
 
     if db is None:
         logger.warning(
-            "plan_persist: no db in config — skipping DB write. "
-            "plan_id will be None. Expected in unit tests only."
+            "plan_persist: no db in config — skipping DB write (plan_id=None). "
+            "Expected in unit tests only."
         )
         return {**state, "graph_trace": trace, "plan_id": None}
 
@@ -202,17 +153,14 @@ async def plan_persist(state: VaultAIState, config: RunnableConfig) -> VaultAISt
 
 
 def clarify(state: VaultAIState) -> VaultAIState:
-    """
-    STUB Phase 6 — reached when intent_classifier returns UNKNOWN.
-    Returns a clarification prompt. Does NOT write a plan to DB.
-    """
+    """STUB Phase 6 — unknown intent."""
     trace = append_trace(state, "clarify")
     return {
         **state,
         "graph_trace": trace,
         "explanation_filtered": (
             "I'm not sure what type of financial plan you need. "
-            "Try: 'Help me build a budget', 'Where should I invest ₹50,000?', "
+            "Try: 'Help me build a budget', 'Where should I invest Rs.50,000?', "
             "or 'Can I afford a car in 2 years?'"
         ),
     }
@@ -228,7 +176,7 @@ def _build_graph() -> StateGraph:
     # Router
     builder.add_node("intent_classifier", intent_classifier_node)
 
-    # Budget — real implementations
+    # Budget
     builder.add_node("budget_load_v2",   budget_load_v2)
     builder.add_node("budget_optimize",  budget_optimize)
     builder.add_node("budget_validate",  budget_validate)
@@ -236,7 +184,7 @@ def _build_graph() -> StateGraph:
     builder.add_node("budget_filter",    budget_filter)
     builder.add_node("budget_fallback",  budget_fallback)
 
-    # Invest — stubs
+    # Invest
     builder.add_node("invest_fetch_data", invest_fetch_data)
     builder.add_node("invest_allocate",   invest_allocate)
     builder.add_node("invest_validate",   invest_validate)
@@ -244,7 +192,7 @@ def _build_graph() -> StateGraph:
     builder.add_node("invest_filter",     invest_filter)
     builder.add_node("invest_fallback",   invest_fallback)
 
-    # Goal — stubs
+    # Goal
     builder.add_node("goal_define",    goal_define)
     builder.add_node("goal_simulate",  goal_simulate)
     builder.add_node("goal_validate",  goal_validate)
@@ -261,7 +209,7 @@ def _build_graph() -> StateGraph:
     builder.add_node("plan_persist", plan_persist)
     builder.add_node("clarify",      clarify)
 
-    # ── Edges ────────────────────────────────────────────────────────────
+    # ── Edges ─────────────────────────────────────────────────────────────
 
     builder.set_entry_point("intent_classifier")
 
@@ -283,10 +231,7 @@ def _build_graph() -> StateGraph:
     builder.add_conditional_edges(
         "budget_validate",
         _route_after_budget_validate,
-        {
-            "budget_explain":  "budget_explain",
-            "budget_fallback": "budget_fallback",
-        },
+        {"budget_explain": "budget_explain", "budget_fallback": "budget_fallback"},
     )
     builder.add_edge("budget_explain",  "budget_filter")
     builder.add_edge("budget_filter",   "plan_persist")
@@ -334,11 +279,12 @@ def _build_graph() -> StateGraph:
 
 def compile_graph():
     """
-    Compile the VaultAI StateGraph. Called once at application startup.
+    Compile the VaultAI StateGraph. Called once at startup.
 
-    Always use ainvoke() from async route handlers:
-        await graph.ainvoke(state, config={"configurable": {"thread_id": user_id}})
+    Use ainvoke() from async route handlers:
+        await graph.ainvoke(
+            state,
+            config={"configurable": {"thread_id": user_id, "db": db}},
+        )
     """
-    builder = _build_graph()
-    memory  = MemorySaver()
-    return builder.compile(checkpointer=memory)
+    return _build_graph().compile(checkpointer=MemorySaver())

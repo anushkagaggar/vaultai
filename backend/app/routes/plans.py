@@ -54,9 +54,22 @@ _graph = compile_graph()
 
 
 # ---------------------------------------------------------------------------
+# Shared response model
+# ---------------------------------------------------------------------------
+class PlanResponse(BaseModel):
+    plan_id:             Optional[int]
+    plan_type:           str
+    projected_outcomes:  Optional[dict]
+    explanation:         Optional[str]
+    confidence:          Optional[dict]
+    degraded:            bool
+    graph_trace:         list[str]
+    source_hash:         Optional[str]
+
+
+# ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
-
 class BudgetPlanRequest(BaseModel):
     """
     Request body for POST /plans/budget.
@@ -80,191 +93,246 @@ class BudgetPlanRequest(BaseModel):
         return v
 
 
-class AllocationItem(BaseModel):
-    category:      str
-    requested:     float
-    allocated:     float
-    cut_amount:    float
-    cut_pct:       float
-    priority:      str
+class InvestPlanRequest(BaseModel):
+    investment_amount: float = Field(..., gt=0,
+                                     description="Lump sum amount to invest")
+    risk_profile:      str   = Field("moderate",
+                                     description="conservative | moderate | aggressive")
+    horizon_months:    int   = Field(36, gt=0,
+                                     description="Investment horizon in months")
+    income_monthly:    float = Field(0.0, ge=0,
+                                     description="Monthly income (optional, for surplus calc)")
+    message:           str   = Field("help me invest")
+
+    @field_validator("risk_profile")
+    @classmethod
+    def valid_profile(cls, v: str) -> str:
+        allowed = {"conservative", "moderate", "aggressive"}
+        if v.lower() not in allowed:
+            raise ValueError(f"risk_profile must be one of: {', '.join(sorted(allowed))}")
+        return v.lower()
 
 
-class BudgetAllocation(BaseModel):
-    status:              str    # FEASIBLE | INFEASIBLE | DEFICIT
-    income_monthly:      float
-    savings_target:      float
-    total_fixed:         float
-    discretionary_pool:  float
-    allocations:         list[AllocationItem]
-    total_allocated:     float
-    actual_savings:      float
-    savings_gap:         float
-    surplus:             float
+class GoalPlanRequest(BaseModel):
+    goal_type:       str   = Field(...,
+                                   description="savings | emergency_fund | purchase | education | retirement")
+    target_amount:   float = Field(..., gt=0,
+                                   description="Monetary goal to reach")
+    horizon_months:  int   = Field(..., gt=0,
+                                   description="Months until target date")
+    current_savings: float = Field(0.0, ge=0,
+                                   description="Starting balance")
+    monthly_savings: Optional[float] = Field(None, ge=0,
+                                             description="Fixed monthly contribution (derived from V2 if omitted)")
+    annual_rate:     float = Field(0.07, ge=0, le=1,
+                                   description="Expected annual growth rate (decimal)")
+    income_monthly:  float = Field(0.0, ge=0,
+                                   description="Monthly income (used to derive monthly_savings if omitted)")
+    message:         str   = Field("help me with my goal")
+
+    @field_validator("goal_type")
+    @classmethod
+    def valid_goal_type(cls, v: str) -> str:
+        allowed = {"savings", "emergency_fund", "purchase", "education", "retirement"}
+        if v.lower() not in allowed:
+            raise ValueError(f"goal_type must be one of: {', '.join(sorted(allowed))}")
+        return v.lower()
 
 
-class ProjectedOutcomes(BaseModel):
-    monthly_savings:    float
-    annual_savings:     float
-    savings_rate:       float
-    budget_allocation:  dict    # full allocate_budget() output
-    optimizer_used:     str
+# ---------------------------------------------------------------------------
+# Shared graph runner — keeps route handlers DRY
+# ---------------------------------------------------------------------------
+
+async def _run_graph(
+    plan_type:     PlanType,
+    user_id:       str,
+    user_message:  str,
+    request_params: dict,
+    db:            Any,
+) -> dict:
+    """
+    Build state, call ainvoke, handle common exceptions.
+    Returns the raw result dict from the graph.
+    """
+    initial_state = make_initial_state(
+        user_id        = user_id,
+        user_message   = user_message,
+        request_params = {
+            "_plan_type":    plan_type.value,
+            **request_params,
+        },
+    )
+
+    try:
+        result = await _graph.ainvoke(
+            initial_state,
+            config={"configurable": {"thread_id": user_id, "db": db}},
+        )
+    except ValueError as exc:
+        logger.warning("graph ValueError for user %s: %s", user_id, exc)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=str(exc))
+    except RuntimeError as exc:
+        logger.error("graph RuntimeError for user %s: %s", user_id, exc)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Plan generation failed. Please try again.")
+    except Exception as exc:
+        logger.error("graph unexpected error for user %s: %s", user_id, exc)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="An unexpected error occurred.")
+
+    return result
 
 
-class ConfidenceBlock(BaseModel):
-    overall:         float
-    data_coverage:   float
-    assumption_risk: str
-
-
-class BudgetPlanResponse(BaseModel):
-    plan_id:              Optional[int]
-    plan_type:            str
-    projected_outcomes:   Optional[dict]
-    explanation:          Optional[str]
-    confidence:           Optional[dict]
-    degraded:             bool
-    graph_trace:          list[str]
-    source_hash:          Optional[str]
+def _to_response(result: dict, plan_type: PlanType) -> PlanResponse:
+    pt = result.get("plan_type", plan_type)
+    pt_str = pt.value if hasattr(pt, "value") else str(pt)
+    return PlanResponse(
+        plan_id            = result.get("plan_id"),
+        plan_type          = pt_str,
+        projected_outcomes = result.get("projected_outcomes"),
+        explanation        = result.get("explanation_filtered"),
+        confidence         = result.get("confidence"),
+        degraded           = result.get("degraded", False),
+        graph_trace        = result.get("graph_trace", []),
+        source_hash        = result.get("source_hash"),
+    )
 
 
 # ---------------------------------------------------------------------------
 # POST /plans/budget
 # ---------------------------------------------------------------------------
 
-@router.post(
-    "/budget",
-    response_model=BudgetPlanResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Generate a budget plan",
-    description=(
-        "Runs the full budget agent pipeline: V2 analytics → optimizer → "
-        "validation checkpoint → LLM explanation → DB persist."
-    ),
-)
+@router.post("/budget", response_model=PlanResponse,
+             status_code=status.HTTP_201_CREATED)
 async def create_budget_plan(
     body:         BudgetPlanRequest,
     current_user: Any = Depends(get_current_user),
     db:           Any = Depends(get_db),
-) -> BudgetPlanResponse:
-    """
-    POST /plans/budget
-
-    Full flow:
-      1. Pre-fetch V2 analytics (async DB call in route's async context)
-      2. Build graph state
-      3. await graph.ainvoke()
-      4. Return structured response
-    """
+) -> PlanResponse:
     user_id = str(current_user.id)
 
-    # ── Step 1: Pre-fetch V2 analytics ────────────────────────────────────
-    # Done here because we have the AsyncSession from DI and are already async.
-    # The budget_load_v2 node picks this up from request_params["_v2_analytics"].
     try:
         v2_analytics = await build_trends_report(db, current_user.id)
     except Exception as exc:
-        logger.error("create_budget_plan: build_trends_report failed for user %s: %s",
-                     user_id, exc)
+        logger.error("build_trends_report failed for user %s: %s", user_id, exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "Spending history could not be loaded. "
-                "Ensure expenses have been recorded before generating a budget plan."
-            ),
+            detail="Spending history could not be loaded. Record expenses first.",
         )
 
-    # ── Step 2: Build initial state ───────────────────────────────────────
-    initial_state = make_initial_state(
-        user_id        = user_id,
-        user_message   = body.message,
+    result = await _run_graph(
+        plan_type     = PlanType.BUDGET,
+        user_id       = user_id,
+        user_message  = body.message,
         request_params = {
-            "_plan_type":         PlanType.BUDGET.value,   # bypass intent_classifier
-            "_v2_analytics":      v2_analytics,            # pre-fetched above
+            "_v2_analytics":      v2_analytics,
             "income_monthly":     body.income_monthly,
             "savings_target_pct": body.savings_target_pct,
             "fixed_categories":   body.fixed_categories,
         },
+        db = db,
     )
+    return _to_response(result, PlanType.BUDGET)
 
-    # ── Step 3: Run graph ─────────────────────────────────────────────────
+
+# ---------------------------------------------------------------------------
+# POST /plans/invest
+# ---------------------------------------------------------------------------
+
+@router.post("/invest", response_model=PlanResponse,
+             status_code=status.HTTP_201_CREATED)
+async def create_invest_plan(
+    body:         InvestPlanRequest,
+    current_user: Any = Depends(get_current_user),
+    db:           Any = Depends(get_db),
+) -> PlanResponse:
+    user_id = str(current_user.id)
+
     try:
-        result = await _graph.ainvoke(
-            initial_state,
-            config={"configurable": {"thread_id": user_id, "db":db,}},
-        )
-    except ValueError as exc:
-        # income_monthly missing or zero — user error
-        logger.warning("create_budget_plan: validation error for user %s: %s", user_id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        )
-    except RuntimeError as exc:
-        # budget_load_v2 dependency failure (shouldn't happen — we pre-fetched above)
-        logger.error("create_budget_plan: runtime error for user %s: %s", user_id, exc)
+        v2_analytics = await build_trends_report(db, current_user.id)
+    except Exception as exc:
+        logger.error("build_trends_report failed for user %s: %s", user_id, exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Budget plan generation failed. Please try again.",
+            detail="Spending history could not be loaded. Record expenses first.",
         )
+
+    result = await _run_graph(
+        plan_type     = PlanType.INVEST,
+        user_id       = user_id,
+        user_message  = body.message,
+        request_params = {
+            "_v2_analytics":   v2_analytics,
+            "investment_amount": body.investment_amount,
+            "risk_profile":    body.risk_profile,
+            "horizon_months":  body.horizon_months,
+            "income_monthly":  body.income_monthly,
+        },
+        db = db,
+    )
+    return _to_response(result, PlanType.INVEST)
+
+
+# ---------------------------------------------------------------------------
+# POST /plans/goal
+# ---------------------------------------------------------------------------
+
+@router.post("/goal", response_model=PlanResponse,
+             status_code=status.HTTP_201_CREATED)
+async def create_goal_plan(
+    body:         GoalPlanRequest,
+    current_user: Any = Depends(get_current_user),
+    db:           Any = Depends(get_db),
+) -> PlanResponse:
+    user_id = str(current_user.id)
+
+    try:
+        v2_analytics = await build_trends_report(db, current_user.id)
     except Exception as exc:
-        logger.error("create_budget_plan: unexpected error for user %s: %s", user_id, exc)
+        logger.error("build_trends_report failed for user %s: %s", user_id, exc)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Spending history could not be loaded. Record expenses first.",
         )
 
-    # ── Step 4: Build response ────────────────────────────────────────────
-    return BudgetPlanResponse(
-        plan_id             = result.get("plan_id"),
-        plan_type           = str(result.get("plan_type", PlanType.BUDGET)),
-        projected_outcomes  = result.get("projected_outcomes"),
-        explanation         = result.get("explanation_filtered"),
-        confidence          = result.get("confidence"),
-        degraded            = result.get("degraded", False),
-        graph_trace         = result.get("graph_trace", []),
-        source_hash         = result.get("source_hash"),
+    params: dict = {
+        "_v2_analytics":   v2_analytics,
+        "goal_type":       body.goal_type,
+        "target_amount":   body.target_amount,
+        "horizon_months":  body.horizon_months,
+        "current_savings": body.current_savings,
+        "annual_rate":     body.annual_rate,
+        "income_monthly":  body.income_monthly,
+    }
+    # Only inject monthly_savings if explicitly provided — otherwise goal_simulate derives it
+    if body.monthly_savings is not None:
+        params["monthly_savings"] = body.monthly_savings
+
+    result = await _run_graph(
+        plan_type     = PlanType.GOAL,
+        user_id       = user_id,
+        user_message  = body.message,
+        request_params = params,
+        db = db,
     )
+    return _to_response(result, PlanType.GOAL)
 
 
 # ---------------------------------------------------------------------------
-# STUB endpoints — Phase 4/5/6
+# STUB endpoints — Phase 5+
 # ---------------------------------------------------------------------------
-
-@router.post("/invest", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def create_invest_plan() -> dict:
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Investment plans are coming in Phase 4.",
-    )
-
-
-@router.post("/goal", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def create_goal_plan() -> dict:
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Goal plans are coming in Phase 5.",
-    )
-
 
 @router.post("/chat", status_code=status.HTTP_501_NOT_IMPLEMENTED)
 async def create_chat_plan() -> dict:
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Chat-based planning is coming in Phase 6.",
-    )
+    raise HTTPException(status_code=501, detail="Chat planning coming in Phase 6.")
 
 
 @router.get("/{plan_id}", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def get_plan(plan_id: str) -> dict:
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Plan retrieval is coming in Phase 4.",
-    )
+async def get_plan(plan_id: int) -> dict:
+    raise HTTPException(status_code=501, detail="Plan retrieval coming in Phase 5.")
 
 
 @router.get("/{plan_id}/trace", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def get_plan_trace(plan_id: str) -> dict:
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Trace retrieval is coming in Phase 4.",
-    )
+async def get_plan_trace(plan_id: int) -> dict:
+    raise HTTPException(status_code=501, detail="Trace retrieval coming in Phase 5.")
