@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 GROQ_API_URL        = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL          = "llama3-8b-8192"
+GROQ_MODEL          = "llama-3.1-8b-instant"
 GROQ_TIMEOUT_S      = 15
 DEFAULT_SAVINGS_PCT = 0.20   # 20% savings target when not specified by user
 
@@ -492,6 +492,14 @@ async def budget_explain(state: VaultAIState) -> VaultAIState:
     except httpx.TimeoutException:
         msg = f"Groq timed out after {GROQ_TIMEOUT_S}s"
         logger.warning("budget_explain: %s", msg)
+    except httpx.HTTPStatusError as exc:
+        # Log the full Groq error body so we know exactly what's wrong
+        try:
+            error_body = exc.response.text
+        except Exception:
+            error_body = "(could not read response body)"
+        msg = f"Groq HTTP {exc.response.status_code}: {error_body}"
+        logger.error("budget_explain: %s", msg)
     except Exception as exc:
         msg = f"Groq call failed: {type(exc).__name__}: {exc}"
         logger.error("budget_explain: %s", msg)
