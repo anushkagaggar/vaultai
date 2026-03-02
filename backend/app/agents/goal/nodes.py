@@ -554,9 +554,10 @@ def goal_filter(state: VaultAIState) -> VaultAIState:
         filtered = _build_deterministic_summary(outcomes, assum)
         logger.info("goal_filter: LLM was None — deterministic summary used")
     else:
-        filtered = _SPECULATIVE_RE.sub("", raw)
-        filtered = re.sub(r"  +", " ", filtered).strip()
-        logger.info("goal_filter: scrubbed %d→%d chars", len(raw), len(filtered))
+        from app.agents.filters.llm_output_filter import filter_llm_output
+        result   = filter_llm_output(raw, outcomes, assum)
+        filtered = result.text_clean
+        logger.info("goal_filter: %d→%d chars", len(raw), len(filtered))
 
     return {**state, "graph_trace": trace, "explanation_filtered": filtered}
 
