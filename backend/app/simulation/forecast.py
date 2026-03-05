@@ -463,3 +463,332 @@ def contribution_required(
         "growth_contribution": growth_only,
         "is_already_feasible": False,
     }
+
+
+def debt_payoff_schedule(
+    outstanding: float,
+    annual_interest_rate: float,
+    monthly_payment: float,
+) -> dict:
+    """
+    Generate a full debt payoff schedule with amortisation.
+
+    Given an outstanding balance, an annual interest rate, and a fixed
+    monthly payment, produce the month-by-month schedule showing:
+      - opening balance each month
+      - interest charged
+      - principal repaid
+      - closing balance
+
+    Also computes:
+      - total_months: how many months until balance hits zero
+      - total_interest_paid: sum of all interest charges
+      - interest_saved: difference vs paying minimum (interest-only)
+      - minimum_payment: interest-only payment (balance never reduces)
+
+    Formula per month:
+        interest_charge = opening_balance * monthly_rate
+        principal_paid  = monthly_payment - interest_charge
+        closing_balance = opening_balance - principal_paid
+
+    The schedule terminates when closing_balance <= 0 or at month 600
+    (50-year guard to prevent infinite loops on near-zero payments).
+
+    Args:
+        outstanding:           Current debt balance (> 0)
+        annual_interest_rate:  Annual rate as decimal (0.18 = 18%)
+        monthly_payment:       Fixed monthly payment amount
+
+    Returns:
+        {
+            "total_months":        int,
+            "total_interest_paid": float,
+            "total_paid":          float,
+            "interest_saved":      float,   ← vs interest-only path
+            "minimum_payment":     float,   ← interest-only amount
+            "payoff_schedule":     list[dict],
+            "payment_sufficient":  bool,    ← False if payment <= interest
+        }
+
+    Manual verification:
+        debt_payoff_schedule(100000, 0.12, 5000)
+        monthly_r ≈ 0.009489
+        Month 1: interest = 100000 * 0.009489 = 948.9, principal = 4051.1
+        Month 2: balance = 95948.9, interest = 910.0, principal = 4090.0
+        ...continues until balance = 0
+        total_months ≈ 24 (verify with Excel NPER(1%,5000,-100000) ≈ 22.4)
+
+    Raises:
+        ValueError: outstanding <= 0, rate < 0, payment <= 0
+    """
+    if outstanding <= 0:
+        raise ValueError(f"outstanding must be > 0, got {outstanding}")
+    if annual_interest_rate < 0:
+        raise ValueError(f"annual_interest_rate must be >= 0, got {annual_interest_rate}")
+    if monthly_payment <= 0:
+        raise ValueError(f"monthly_payment must be > 0, got {monthly_payment}")
+
+    monthly_rate = _annual_to_monthly_rate(
+        min(annual_interest_rate, MAX_ANNUAL_RATE)
+    )
+    minimum_payment = _round2(_to_decimal(outstanding) * monthly_rate)
+
+    # Guard: if payment doesn't cover interest, debt grows — flag it
+    first_interest = _round2(_to_decimal(outstanding) * monthly_rate)
+    if monthly_payment <= first_interest:
+        return {
+            "total_months":        None,
+            "total_interest_paid": None,
+            "total_paid":          None,
+            "interest_saved":      None,
+            "minimum_payment":     minimum_payment,
+            "payoff_schedule":     [],
+            "payment_sufficient":  False,
+        }
+
+    balance = _to_decimal(outstanding)
+    payment = _to_decimal(monthly_payment)
+    schedule: list[dict] = []
+    total_interest = Decimal("0")
+    month = 0
+    MAX_MONTHS = 600   # 50-year guard
+
+    while balance > Decimal("0.005") and month < MAX_MONTHS:
+        month += 1
+        interest_charge = balance * monthly_rate
+        # Final month: payment may exceed remaining balance
+        actual_payment  = min(payment, balance + interest_charge)
+        principal_paid  = actual_payment - interest_charge
+        closing_balance = balance - principal_paid
+
+        total_interest += interest_charge
+        schedule.append({
+            "month":            month,
+            "opening_balance":  _round2(balance),
+            "interest_charge":  _round2(interest_charge),
+            "principal_paid":   _round2(principal_paid),
+            "payment":          _round2(actual_payment),
+            "closing_balance":  _round2(max(closing_balance, Decimal("0"))),
+        })
+        balance = max(closing_balance, Decimal("0"))
+
+    total_paid     = _round2(_to_decimal(outstanding) + total_interest)
+    interest_total = _round2(total_interest)
+
+    # interest_saved = what you'd pay in interest if you just paid
+    # interest-only forever (technically infinite, so we cap at 10 years
+    # vs actual schedule)
+    interest_only_10yr = _round2(
+        _to_decimal(outstanding) * monthly_rate * Decimal("120")
+    )
+    interest_saved = _round2(
+        max(Decimal("0"), _to_decimal(interest_only_10yr) - total_interest)
+    )
+
+    return {
+        "total_months":        month,
+        "total_interest_paid": interest_total,
+        "total_paid":          total_paid,
+        "interest_saved":      interest_saved,
+        "minimum_payment":     minimum_payment,
+        "payoff_schedule":     schedule,
+        "payment_sufficient":  True,
+    }
+
+
+def multi_goal_tradeoff(
+    goals: list[dict],
+    total_monthly_available: float,
+    annual_rate: float = 0.07,
+) -> dict:
+    """
+    Allocate a fixed monthly budget across 2-5 concurrent goals.
+
+    Each goal is assessed individually via goal_feasibility, then the
+    budget is allocated using a priority-weighted split. Goals are
+    prioritised by:
+      1. Explicit priority rank (if provided in goal dict)
+      2. Urgency: goals with shorter horizons get higher weight
+      3. Feasibility: INFEASIBLE goals get minimum floor allocation
+
+    Args:
+        goals: list of 2-5 goal dicts, each containing:
+            {
+                "goal_id":       str,           ← caller-assigned ID
+                "label":         str,           ← display name
+                "target_amount": float,
+                "horizon_months": int,
+                "current_savings": float,       ← default 0
+                "priority":      int,           ← 1=highest (optional)
+            }
+        total_monthly_available: total monthly amount to split across goals
+        annual_rate: assumed growth rate for all goals (decimal)
+
+    Returns:
+        {
+            "total_monthly_available": float,
+            "total_allocated":         float,
+            "unallocated":             float,
+            "allocations": [
+                {
+                    "goal_id":            str,
+                    "label":              str,
+                    "monthly_allocated":  float,
+                    "feasibility":        dict,    ← from goal_feasibility
+                    "contribution_req":   dict,    ← from contribution_required
+                    "meets_requirement":  bool,    ← allocated >= required
+                    "priority_rank":      int,
+                    "weight":             float,
+                },
+                ...
+            ],
+            "tradeoff_summary": str,   ← human-readable allocation summary
+        }
+
+    Raises:
+        ValueError: fewer than 2 or more than 5 goals, or invalid goal dicts
+    """
+    if not (2 <= len(goals) <= 5):
+        raise ValueError(
+            f"multi_goal_tradeoff requires 2-5 goals, got {len(goals)}"
+        )
+    if total_monthly_available <= 0:
+        raise ValueError(
+            f"total_monthly_available must be > 0, got {total_monthly_available}"
+        )
+
+    # Validate each goal and compute required contribution
+    enriched: list[dict] = []
+    for i, g in enumerate(goals):
+        for req_key in ("goal_id", "target_amount", "horizon_months"):
+            if req_key not in g:
+                raise ValueError(
+                    f"Goal at index {i} missing required key '{req_key}'"
+                )
+        target   = float(g["target_amount"])
+        horizon  = int(g["horizon_months"])
+        current  = float(g.get("current_savings", 0))
+        priority = int(g.get("priority", i + 1))
+
+        if horizon <= 0:
+            raise ValueError(
+                f"Goal '{g['goal_id']}': horizon_months must be > 0"
+            )
+
+        feasibility = goal_feasibility(
+            target_amount   = target,
+            current_savings = current,
+            monthly_savings = 0.0,   # without any allocation
+            annual_rate     = annual_rate,
+            horizon_months  = horizon,
+        )
+        contrib = contribution_required(
+            target_amount   = target,
+            current_savings = current,
+            annual_rate     = annual_rate,
+            horizon_months  = horizon,
+        )
+
+        enriched.append({
+            "goal_id":           g["goal_id"],
+            "label":             g.get("label", g["goal_id"]),
+            "target_amount":     target,
+            "horizon_months":    horizon,
+            "current_savings":   current,
+            "priority":          priority,
+            "feasibility":       feasibility,
+            "contribution_req":  contrib,
+            "required_monthly":  contrib["monthly_contribution_required"],
+        })
+
+    # ── Priority-weighted allocation ─────────────────────────────────────
+    # Weight formula:
+    #   base_weight  = 1 / priority_rank        (lower rank = higher weight)
+    #   urgency_mult = 1 / sqrt(horizon_months) (shorter horizon = higher weight)
+    #   final_weight = base_weight * urgency_mult, normalised to sum = 1.0
+    import math as _math
+    weights: list[float] = []
+    for g in enriched:
+        base     = 1.0 / g["priority"]
+        urgency  = 1.0 / _math.sqrt(max(g["horizon_months"], 1))
+        weights.append(base * urgency)
+
+    total_weight = sum(weights)
+    norm_weights = [w / total_weight for w in weights]
+
+    # First pass: allocate proportionally
+    raw_allocations = [
+        total_monthly_available * w for w in norm_weights
+    ]
+
+    # Second pass: ensure each goal gets at least its required amount
+    # if total budget allows, otherwise allocate proportionally
+    total_required = sum(g["required_monthly"] for g in enriched)
+    available = _to_decimal(total_monthly_available)
+
+    if _to_decimal(total_required) <= available:
+        # Budget sufficient — give each goal exactly what it needs,
+        # distribute surplus proportionally
+        surplus = float(available) - total_required
+        final_allocations = []
+        for i, g in enumerate(enriched):
+            alloc = g["required_monthly"] + surplus * norm_weights[i]
+            final_allocations.append(_round2(_to_decimal(alloc)))
+    else:
+        # Budget insufficient — proportional split, no goal gets zero
+        final_allocations = [
+            max(_round2(_to_decimal(a)), 0.01) for a in raw_allocations
+        ]
+
+    # Build output
+    allocations = []
+    total_allocated = 0.0
+    for i, g in enumerate(enriched):
+        alloc = final_allocations[i]
+        total_allocated += alloc
+
+        # Re-run feasibility with allocated amount
+        feasibility_with_alloc = goal_feasibility(
+            target_amount   = g["target_amount"],
+            current_savings = g["current_savings"],
+            monthly_savings = alloc,
+            annual_rate     = annual_rate,
+            horizon_months  = g["horizon_months"],
+        )
+
+        allocations.append({
+            "goal_id":           g["goal_id"],
+            "label":             g["label"],
+            "monthly_allocated": alloc,
+            "feasibility":       feasibility_with_alloc,
+            "contribution_req":  g["contribution_req"],
+            "meets_requirement": alloc >= g["required_monthly"] - 0.01,
+            "priority_rank":     g["priority"],
+            "weight":            round(norm_weights[i], 4),
+        })
+
+    unallocated = _round2(_to_decimal(total_monthly_available) - _to_decimal(total_allocated))
+
+    # Build tradeoff summary
+    feasible_count = sum(
+        1 for a in allocations
+        if a["feasibility"]["label"] == "FEASIBLE"
+    )
+    summary_parts = [
+        f"{a['label']}: Rs.{a['monthly_allocated']:,.0f}/mo "
+        f"({a['feasibility']['label']})"
+        for a in allocations
+    ]
+    tradeoff_summary = (
+        f"{feasible_count}/{len(goals)} goals feasible with "
+        f"Rs.{total_monthly_available:,.0f}/mo budget. "
+        + " | ".join(summary_parts)
+    )
+
+    return {
+        "total_monthly_available": total_monthly_available,
+        "total_allocated":         _round2(_to_decimal(total_allocated)),
+        "unallocated":             unallocated,
+        "allocations":             allocations,
+        "tradeoff_summary":        tradeoff_summary,
+    }
