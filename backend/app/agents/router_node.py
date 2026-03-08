@@ -115,7 +115,9 @@ _KEYWORD_RULES: list[tuple[PlanType, list[str]]] = [
         PlanType.BUDGET,
         [
             "budget",
-            "help me save",
+            # NOTE: "help me save" intentionally removed — it fires before
+            # GOAL's "save for" keyword and misroutes "help me save for X".
+            # "save more" and "spend less" still cover pure savings-advice queries.
             "how much can i save",
             "spending",
             "expenses",
@@ -146,7 +148,7 @@ _KEYWORD_RULES: list[tuple[PlanType, list[str]]] = [
             "risk profile",
             "sip",
             "fixed deposit",
-            "fd ",
+            "fd",           # was "fd " — trailing space missed "FD" at end of sentence
             "debt fund",
         ],
     ),
