@@ -1,6 +1,5 @@
 'use client';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import type { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
 import { formatIndianCurrency } from '../../lib/planUtils';
 
 interface AllocationWheelProps {
@@ -18,10 +17,6 @@ export default function AllocationWheel({ equity, debt, liquid, monthlyAmount }:
     { name: 'Debt',   value: debt,   amount: Math.round(monthlyAmount * debt / 100) },
     { name: 'Liquid', value: liquid, amount: Math.round(monthlyAmount * liquid / 100) },
   ];
-
-  // Fix: use ValueType / NameType to match Recharts Formatter signature
-  const tooltipFormatter = (value: ValueType, name: NameType) =>
-    [`${value}%`, String(name)] as [string, string];
 
   return (
     <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 24 }}>
@@ -45,7 +40,13 @@ export default function AllocationWheel({ equity, debt, liquid, monthlyAmount }:
               ))}
             </Pie>
             <Tooltip
-              formatter={tooltipFormatter}
+              // Fix: cast to any to escape the overly-strict Recharts generic
+              // Recharts types ValueType as string|number|Array but also
+              // allows undefined in the Formatter signature — casting avoids
+              // the mismatch without losing runtime safety.
+              formatter={(value: unknown, name: unknown) =>
+                [`${value ?? 0}%`, String(name)] as [string, string]
+              }
               contentStyle={{
                 background: '#22263A',
                 border: '1px solid #2E3248',

@@ -274,10 +274,70 @@ export async function getDocumentStatus(docId: number) {
   return handleResponse(res);
 }
 
+// ─── V3 — Plans ───────────────────────────────────────────────────────────────
+// Endpoints confirmed from Swagger:
+//   POST /plans/budget/   — Create Budget Plan
+//   POST /plans/invest/   — Create Invest Plan
+//   POST /plans/goal/     — Create Goal Plan
+//   POST /plans/chat/     — Chat → returns a plan
+//   GET  /plans/{id}/     — Get Plan by ID
+//   GET  /plans/{id}/trace/ — Get Plan Trace
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TypeScript Types
-// ─────────────────────────────────────────────────────────────────────────────
+import type {
+  BudgetPlan,
+  InvestPlan,
+  GoalPlan,
+  Plan,
+  ChatResponse,
+} from "./types/plans";
+
+export async function createBudgetPlan(payload: Record<string, unknown>): Promise<BudgetPlan> {
+  const res = await fetch(`${API_URL}/plans/budget/`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res);
+}
+
+export async function createInvestPlan(payload: Record<string, unknown>): Promise<InvestPlan> {
+  const res = await fetch(`${API_URL}/plans/invest/`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res);
+}
+
+export async function createGoalPlan(payload: Record<string, unknown>): Promise<GoalPlan> {
+  const res = await fetch(`${API_URL}/plans/goal/`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res);
+}
+
+export async function sendChatMessage(message: string): Promise<ChatResponse> {
+  const res = await fetch(`${API_URL}/plans/chat/`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ message }),
+  });
+  return handleResponse(res);
+}
+
+export async function getPlan(planId: string): Promise<Plan> {
+  const res = await fetch(`${API_URL}/plans/${planId}/`, { headers: getAuthHeaders() });
+  return handleResponse(res);
+}
+
+export async function getPlanTrace(planId: string) {
+  const res = await fetch(`${API_URL}/plans/${planId}/trace/`, { headers: getAuthHeaders() });
+  return handleResponse(res);
+}
+
+// ─── TypeScript Types ─────────────────────────────────────────────────────────
 
 export interface InsightResponse {
   status: "ready" | "stale" | "unavailable" | "error";
@@ -287,14 +347,14 @@ export interface InsightResponse {
     summary: string;
     explanation: string | null;
     metrics: {
-      rolling: { 
-        "30_day_avg": number; 
-        "60_day_avg": number; 
+      rolling: {
+        "30_day_avg": number;
+        "60_day_avg": number;
         "90_day_avg": number;
       };
-      monthly: { 
-        current_month: number; 
-        previous_month: number; 
+      monthly: {
+        current_month: number;
+        previous_month: number;
         percent_change: number;
       };
       trend_type: string;
@@ -314,7 +374,7 @@ export interface ExecutionResponse {
   execution_id: number;
   status: string;
   is_terminal: boolean;
-  result?: any;
+  result?: unknown;
   error?: string;
   error_code?: string;
 }
@@ -347,30 +407,4 @@ export interface SystemMetrics {
   artifacts: {
     total: number;
   };
-}
-
-
-export async function getPlans(planType?: string): Promise<import('../lib/types/plans').Plan[]> {
-  const qs = planType ? `?plan_type=${planType}` : '';
-  const res = await fetch(`${API_URL}/plans${qs}`, { headers: getAuthHeaders() });
-  return handleResponse(res);
-}
-
-export async function getPlan(planId: string): Promise<import('../lib/types/plans').Plan> {
-  const res = await fetch(`${API_URL}/plans/${planId}`, { headers: getAuthHeaders() });
-  return handleResponse(res);
-}
-
-export async function sendChatMessage(message: string): Promise<import('../lib/types/plans').ChatResponse> {
-  const res = await fetch(`${API_URL}/plans/chat`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ message }),
-  });
-  return handleResponse(res);
-}
-
-export async function getPlanTrace(planId: string) {
-  const res = await fetch(`${API_URL}/plans/${planId}/trace`, { headers: getAuthHeaders() });
-  return handleResponse(res);
 }
