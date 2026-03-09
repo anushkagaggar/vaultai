@@ -3,10 +3,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: "⊞" },
-  { href: "/insights",  label: "Insights",  icon: "✦" },
-  { href: "/uploads",   label: "Uploads",   icon: "⬆" },
-  { href: "/runs",      label: "Runs",      icon: "◎" },
+  { href: "/dashboard", label: "Dashboard",    icon: "⊞" },
+  { href: "/insights",  label: "Insights",     icon: "✦" },
+  { href: "/uploads",   label: "Uploads",      icon: "⬆" },
+  { href: "/runs",      label: "Runs",         icon: "◎" },
+  { href: "/strategy",  label: "Strategy Lab", icon: "◈" },
+  { href: "/plans",     label: "Plans",        icon: "◷" },
+  { href: "/simulate",  label: "Simulator",    icon: "◑" },
 ];
 
 export default function Sidebar() {
@@ -60,20 +63,13 @@ export default function Sidebar() {
         >
           V
         </div>
-        <span
-          style={{
-            fontSize: 16,
-            fontWeight: 700,
-            color: "#F1F5F9",
-            letterSpacing: "-0.02em",
-          }}
-        >
+        <span style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", letterSpacing: "-0.02em" }}>
           VaultAI
         </span>
       </div>
 
-      {/* Nav links */}
-      <nav style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2 }}>
+      {/* Nav */}
+      <nav style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
         {nav.map(({ href, label, icon }) => {
           const active = pathname === href || (href !== "/" && pathname.startsWith(href));
           return (
@@ -102,7 +98,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Bottom - logout */}
+      {/* Logout */}
       <div style={{ padding: "12px 10px", borderTop: "1px solid #2E3248" }}>
         <button
           onClick={logout}
@@ -111,7 +107,6 @@ export default function Sidebar() {
             padding: "9px 12px",
             borderRadius: 8,
             fontSize: 14,
-            fontWeight: 400,
             color: "#94A3B8",
             background: "transparent",
             border: "none",
@@ -130,8 +125,7 @@ export default function Sidebar() {
             (e.currentTarget as HTMLButtonElement).style.background = "transparent";
           }}
         >
-          <span>⊗</span>
-          Logout
+          <span>⊗</span> Logout
         </button>
       </div>
     </aside>

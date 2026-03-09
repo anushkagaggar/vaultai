@@ -348,3 +348,29 @@ export interface SystemMetrics {
     total: number;
   };
 }
+
+
+export async function getPlans(planType?: string): Promise<import('../lib/types/plans').Plan[]> {
+  const qs = planType ? `?plan_type=${planType}` : '';
+  const res = await fetch(`${API_URL}/plans${qs}`, { headers: getAuthHeaders() });
+  return handleResponse(res);
+}
+
+export async function getPlan(planId: string): Promise<import('../lib/types/plans').Plan> {
+  const res = await fetch(`${API_URL}/plans/${planId}`, { headers: getAuthHeaders() });
+  return handleResponse(res);
+}
+
+export async function sendChatMessage(message: string): Promise<import('../lib/types/plans').ChatResponse> {
+  const res = await fetch(`${API_URL}/plans/chat`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ message }),
+  });
+  return handleResponse(res);
+}
+
+export async function getPlanTrace(planId: string) {
+  const res = await fetch(`${API_URL}/plans/${planId}/trace`, { headers: getAuthHeaders() });
+  return handleResponse(res);
+}
