@@ -16,13 +16,12 @@ export async function apiFetch(
     ...options.headers,
   };
 
-  // Always use trailing slash to avoid CORS-breaking 307 redirects from FastAPI/uvicorn.
-  // Handles: /expenses  →  /expenses/
-  //          /expenses?foo=bar  →  /expenses/?foo=bar
-  //          /expenses/  →  /expenses/  (unchanged)
-  const [basePath, queryString] = path.split("?");
-  const normBase = basePath.endsWith("/") ? basePath : `${basePath}/`;
-  const normPath = queryString ? `${normBase}?${queryString}` : normBase;
+  // PERMANENT FIX: HF Spaces nginx redirects no-slash->slash with http:// in
+  // Location header. Browser blocks CORS preflight on ANY redirect.
+  // Solution: always send WITH trailing slash so server responds directly.
+  const [basePath, qs] = path.split('?');
+  const normBase = basePath.endsWith('/') ? basePath : basePath + '/';
+  const normPath = qs ? normBase + '?' + qs : normBase;
 
   const res = await fetch(`${API_URL}${normPath}`, {
     ...options,
