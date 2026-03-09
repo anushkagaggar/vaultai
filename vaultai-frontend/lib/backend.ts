@@ -16,7 +16,15 @@ export async function apiFetch(
     ...options.headers,
   };
 
-  const res = await fetch(`${API_URL}${path}`, {
+  // Always use trailing slash to avoid CORS-breaking 307 redirects from FastAPI/uvicorn.
+  // Handles: /expenses  →  /expenses/
+  //          /expenses?foo=bar  →  /expenses/?foo=bar
+  //          /expenses/  →  /expenses/  (unchanged)
+  const [basePath, queryString] = path.split("?");
+  const normBase = basePath.endsWith("/") ? basePath : `${basePath}/`;
+  const normPath = queryString ? `${normBase}?${queryString}` : normBase;
+
+  const res = await fetch(`${API_URL}${normPath}`, {
     ...options,
     headers,
   });
@@ -168,7 +176,7 @@ async function handleResponse(res: Response) {
 // ─── Insights ────────────────────────────────────────────────────────────────
 
 export async function getInsights() {
-  const res = await fetch(`${API_URL}/insights/trends`, {
+  const res = await fetch(`${API_URL}/insights/trends/`, {
     headers: getAuthHeaders(),
   });
   
@@ -181,7 +189,7 @@ export async function getInsights() {
 }
 
 export async function runInsights() {
-  const res = await fetch(`${API_URL}/insights/trends`, {
+  const res = await fetch(`${API_URL}/insights/trends/`, {
     method: "POST",
     headers: getAuthHeaders(),
   });
@@ -197,7 +205,7 @@ export async function runInsights() {
 // ─── Executions ──────────────────────────────────────────────────────────────
 
 export async function getExecution(executionId: number) {
-  const res = await fetch(`${API_URL}/executions/${executionId}`, {
+  const res = await fetch(`${API_URL}/executions/${executionId}/`, {
     headers: getAuthHeaders(),
   });
   
@@ -210,7 +218,7 @@ export async function getExecution(executionId: number) {
 }
 
 export async function getSystemMetrics() {
-  const res = await fetch(`${API_URL}/system/metrics`, {
+  const res = await fetch(`${API_URL}/system/metrics/`, {
     headers: getAuthHeaders(),
   });
   
@@ -234,7 +242,7 @@ export async function uploadRagDocument(file: File) {
     ? localStorage.getItem("token") 
     : null;
   
-  const res = await fetch(`${API_URL}/rag/upload`, {
+  const res = await fetch(`${API_URL}/rag/upload/`, {
     method: "POST",
     headers: {
       // Don't set Content-Type for FormData - browser sets it with boundary
@@ -247,7 +255,7 @@ export async function uploadRagDocument(file: File) {
 }
 
 export async function getRagDocuments() {
-  const res = await fetch(`${API_URL}/rag/documents`, {
+  const res = await fetch(`${API_URL}/rag/documents/`, {
     method: "GET",
     headers: getAuthHeaders(),
   });
@@ -257,7 +265,7 @@ export async function getRagDocuments() {
 }
 
 export async function deleteRagDocument(docId: number) {
-  const res = await fetch(`${API_URL}/rag/documents/${docId}`, {
+  const res = await fetch(`${API_URL}/rag/documents/${docId}/`, {
     method: "DELETE",
     headers: getAuthHeaders(),
   });
@@ -266,7 +274,7 @@ export async function deleteRagDocument(docId: number) {
 }
 
 export async function getDocumentStatus(docId: number) {
-  const res = await fetch(`${API_URL}/rag/documents/${docId}/status`, {
+  const res = await fetch(`${API_URL}/rag/documents/${docId}/status/`, {
     method: "GET",
     headers: getAuthHeaders(),
   });
