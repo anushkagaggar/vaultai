@@ -4,6 +4,17 @@ if (!API_URL) {
   throw new Error("NEXT_PUBLIC_API_URL not set");
 }
 
+export class ApiError extends Error {
+  status: number;
+  detail: string;
+  constructor(status: number, detail: string) {
+    super(detail);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 export async function apiFetch(
   path: string,
   options: RequestInit = {}
@@ -31,14 +42,20 @@ export async function apiFetch(
   });
 
   if (res.status === 401) {
-  localStorage.removeItem("token");
-  window.location.href = "/auth";
-  return;}
+    localStorage.removeItem("token");
+    throw new ApiError(401, "unauthorized");
+  }
 
   if (!res.ok) {
-  const text = await res.text();
-  throw new Error(text || res.statusText);
-}
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    } catch {
+      detail = await res.text().catch(() => res.statusText);
+    }
+    throw new ApiError(res.status, detail);
+  }
 
 // Handle No Content (DELETE etc.)
 if (res.status === 204) {
@@ -161,16 +178,7 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
-export class ApiError extends Error {
-  status: number;
-  detail: string;
-  constructor(status: number, detail: string) {
-    super(detail);
-    this.name = "ApiError";
-    this.status = status;
-    this.detail = detail;
-  }
-}
+
 
 async function handleResponse(res: Response) {
   if (res.status === 401) {

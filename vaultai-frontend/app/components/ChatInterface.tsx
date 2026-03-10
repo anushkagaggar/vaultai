@@ -616,6 +616,7 @@ export default function ChatInterface() {
               {/* HITL form */}
               {msg.hitl && (
                 <HitlForm
+                  key={msg.id}
                   fields={msg.hitl.missingFields}
                   onSubmit={(vals) => handleHitlSubmit(msg.id, vals)}
                 />
