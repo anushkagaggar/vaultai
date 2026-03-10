@@ -31,7 +31,10 @@ function getSummary(plan: Plan): string {
 }
 
 export default function PlanCard({ plan }: { plan: Plan }) {
-  const meta = TYPE_META[plan.planType];
+  // Normalise planType in case backend sends "PlanType.BUDGET" or unknown value
+  const rawType = String(plan.planType ?? '');
+  const normType = rawType.includes('.') ? rawType.split('.').pop()!.toLowerCase() : rawType.toLowerCase();
+  const meta = TYPE_META[normType] ?? TYPE_META['budget']; // fallback to budget meta
   const confidence = Math.round((plan.confidence?.overall ?? 0) * 100);
 
   return (

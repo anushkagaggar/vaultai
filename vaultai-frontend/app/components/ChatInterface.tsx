@@ -173,6 +173,99 @@ const SUGGESTIONS = [
   { icon: PlusCircle, label: 'Add an expense of ₹500 for Groceries today',          intent: 'add_expense'  as Intent },
 ];
 
+
+// ─── Backend response → Plan shape normaliser ────────────────────────────────
+function normalisePlan(raw: Record<string, unknown>): Plan {
+  const rawType = String(raw.plan_type ?? raw.planType ?? 'budget');
+  const planType = rawType.includes('.') ? rawType.split('.').pop()!.toLowerCase() : rawType.toLowerCase();
+  const outcomes = (raw.projected_outcomes ?? {}) as Record<string, unknown>;
+  const conf = raw.confidence as Record<string, unknown> | null | undefined;
+
+  const base = {
+    id:               String(raw.plan_id ?? raw.id ?? ''),
+    userId:           '',
+    createdAt:        String(raw.created_at ?? raw.createdAt ?? new Date().toISOString()),
+    validationStatus: 'validated' as const,
+    confidence: {
+      overall:           Number(conf?.overall           ?? conf?.data_coverage    ?? 0),
+      dataCoverage:      Number(conf?.dataCoverage      ?? conf?.data_coverage    ?? 0),
+      assumptionRisk:    (String(conf?.assumptionRisk   ?? conf?.assumption_risk  ?? 'low')) as import('../../lib/types/plans').AssumptionRisk,
+      externalFreshness: (String(conf?.externalFreshness ?? conf?.external_freshness ?? 'fallback')) as import('../../lib/types/plans').ExternalFreshness,
+    },
+    degraded:    Boolean(raw.degraded),
+    graphTrace:  [],
+    explanation: String(raw.explanation ?? ''),
+    assumptions: {},
+  };
+
+  const emptyScenario = { label: '', finalBalance: 0, totalContributed: 0, totalGrowth: 0, monthsToGoal: null as number | null };
+
+  if (planType === 'budget') {
+    return {
+      ...base,
+      planType:       'budget',
+      incomeMonthly:  Number(outcomes.monthly_income  ?? outcomes.income_monthly  ?? 0),
+      inflationRate:  Number(outcomes.inflation_rate  ?? 0),
+      minSavingsRate: Number(outcomes.savings_rate    ?? outcomes.min_savings_rate ?? 0),
+      monthlySavings: Number(outcomes.monthly_savings ?? 0),
+      annualSavings:  Number(outcomes.annual_savings  ?? 0),
+      projection:     [],
+      scenarios: {
+        base:         emptyScenario,
+        optimistic:   emptyScenario,
+        conservative: emptyScenario,
+      },
+    };
+  }
+
+  if (planType === 'invest') {
+    const rp = String(outcomes.risk_profile ?? 'Moderate');
+    // Coerce to RiskProfile union — capitalise first letter
+    const riskProfile = (rp.charAt(0).toUpperCase() + rp.slice(1).toLowerCase()) as import('../../lib/types/plans').RiskProfile;
+    return {
+      ...base,
+      planType:      'invest',
+      riskProfile,
+      monthlyAmount: Number(outcomes.monthly_amount ?? 0),
+      allocation:    { equity: 0, debt: 0, liquid: 0 },
+      amounts:       { equity: 0, debt: 0, liquid: 0 },
+    };
+  }
+
+  if (planType === 'goal') {
+    const fl = String(outcomes.feasibility_label ?? 'FEASIBLE').toUpperCase();
+    const feasibilityLabel = (['FEASIBLE', 'STRETCH', 'INFEASIBLE'].includes(fl) ? fl : 'FEASIBLE') as import('../../lib/types/plans').FeasibilityLabel;
+    return {
+      ...base,
+      planType:         'goal',
+      goalType:         String(outcomes.goal_type ?? 'savings'),
+      targetAmount:     Number(outcomes.target_amount  ?? 0),
+      horizonMonths:    Number(outcomes.horizon_months ?? 12),
+      projectedBalance: Number(outcomes.projected_balance ?? 0),
+      coverageRatio:    Number(outcomes.coverage_ratio ?? 0),
+      feasibilityLabel,
+      projection:       [],
+    };
+  }
+
+  // simulate / fallback
+  return {
+    ...base,
+    planType:         'simulate',
+    incomeMonthly:    Number(outcomes.income_monthly  ?? 0),
+    monthlySavings:   Number(outcomes.monthly_savings ?? 0),
+    targetAmount:     Number(outcomes.target_amount   ?? 0),
+    horizonMonths:    Number(outcomes.horizon_months  ?? 12),
+    annualRate:       Number(outcomes.annual_rate     ?? 0),
+    finalBalance:     Number(outcomes.final_balance   ?? 0),
+    totalContributed: Number(outcomes.total_contributed ?? 0),
+    totalGrowth:      Number(outcomes.total_growth    ?? 0),
+    monthsToGoal:     outcomes.months_to_goal != null ? Number(outcomes.months_to_goal) : null,
+    coverageRatio:    Number(outcomes.coverage_ratio  ?? 0),
+    projection:       [],
+  };
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ChatInterface() {
@@ -267,43 +360,39 @@ export default function ChatInterface() {
       let confirmText = '';
 
       if (intent === 'budget_plan') {
-        const result = await createBudgetPlan(extractBudgetPayload(text));
-        plan = result as unknown as Plan;
-        const pct = Math.round((result.confidence?.overall || 0) * 100);
+        const raw = await createBudgetPlan(extractBudgetPayload(text)) as unknown as Record<string, unknown>;
+        plan = normalisePlan(raw);
+        const pct = Math.round((plan.confidence?.overall || 0) * 100);
         confirmText = `Budget plan created with **${pct}% confidence**.`;
 
       } else if (intent === 'invest_plan') {
-        const result = await createInvestPlan(extractInvestPayload(text));
-        plan = result as unknown as Plan;
-        const rp = (result as unknown as Record<string, unknown>).riskProfile as string | undefined;
-        confirmText = `Investment plan created — **${rp ?? 'moderate'} risk** profile.`;
+        updateMessage(loadingId, {
+          status: 'error',
+          text: "Investment plans aren\'t available yet — coming in a future update. Try a **budget plan** or **goal plan** instead.",
+        });
+        return;
 
       } else if (intent === 'goal_plan') {
-        const result = await createGoalPlan(extractGoalPayload(text));
-        plan = result as unknown as Plan;
-        const fl = (result as unknown as Record<string, unknown>).feasibilityLabel as string | undefined;
-        confirmText = `Goal plan created. Feasibility: **${fl ?? 'FEASIBLE'}**.`;
+        updateMessage(loadingId, {
+          status: 'error',
+          text: "Goal plans aren\'t available yet — coming in a future update. Try a **budget plan** instead.",
+        });
+        return;
 
       } else {
-        // Catch-all: POST /plans/chat — ChatResponse has plan?: Plan
         const response = await sendChatMessage(text);
         plan = response.plan ?? null;
-        confirmText = response.message || 'Plan created via AI chat.';
+        confirmText = response.message || 'Received a response from the AI.';
       }
 
       if (plan) {
-        const p = plan as unknown as Record<string, unknown>;
-        savePlanRef({
-          id: p.id as string,
-          planType: (p.planType ?? p.plan_type) as import('../../lib/types/plans').PlanType,
-        });
+        savePlanRef({ id: plan.id, planType: plan.planType });
         updateMessage(loadingId, { status: 'ok', text: confirmText, plan });
       } else {
         updateMessage(loadingId, { status: 'ok', text: confirmText });
       }
 
-
-    } catch (err: unknown) {
+        } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong';
       if (msg === 'unauthorized') { router.push('/auth'); return; }
       updateMessage(loadingId, { status: 'error', text: `❌ ${msg}` });
