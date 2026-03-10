@@ -60,18 +60,18 @@ const FIELD_DEFS: Record<string, FieldDef> = {
   income_monthly: {
     key: 'income_monthly', label: 'Monthly Income (₹)',
     placeholder: 'e.g. 80000', type: 'number',
-    parse: (v) => parseFloat(v),
+    parse: (v) => parseFloat(v.replace(/[^\d.]/g, '')),
   },
   savings_target_pct: {
     key: 'savings_target_pct', label: 'Savings Target %',
     placeholder: 'e.g. 20 for 20%', type: 'number',
     // backend expects 0–1 decimal
-    parse: (v) => { const n = parseFloat(v); return n > 1 ? n / 100 : n; },
+    parse: (v) => { const n = parseFloat(v.replace(/[^\d.]/g, '')); return n > 1 ? n / 100 : n; },
   },
   investment_amount: {
     key: 'investment_amount', label: 'Investment Amount (₹)',
     placeholder: 'e.g. 50000', type: 'number',
-    parse: (v) => parseFloat(v),
+    parse: (v) => parseFloat(v.replace(/[^\d.]/g, '')),
   },
   risk_profile: {
     key: 'risk_profile', label: 'Risk Profile',
@@ -86,7 +86,7 @@ const FIELD_DEFS: Record<string, FieldDef> = {
   horizon_months: {
     key: 'horizon_months', label: 'Investment Horizon (months)',
     placeholder: 'e.g. 36 for 3 years', type: 'number',
-    parse: (v) => parseInt(v),
+    parse: (v) => parseInt(v.replace(/[^\d]/g, '')),
   },
   goal_type: {
     key: 'goal_type', label: 'Goal Type',
@@ -103,23 +103,23 @@ const FIELD_DEFS: Record<string, FieldDef> = {
   target_amount: {
     key: 'target_amount', label: 'Target Amount (₹)',
     placeholder: 'e.g. 600000', type: 'number',
-    parse: (v) => parseFloat(v),
+    parse: (v) => parseFloat(v.replace(/[^\d.]/g, '')),
   },
   current_savings: {
     key: 'current_savings', label: 'Current Savings (₹)',
     placeholder: 'e.g. 0', type: 'number',
-    parse: (v) => parseFloat(v),
+    parse: (v) => parseFloat(v.replace(/[^\d.]/g, '')),
   },
   monthly_savings: {
     key: 'monthly_savings', label: 'Monthly Savings Capacity (₹)',
     placeholder: 'Leave blank to let AI calculate', type: 'number',
-    parse: (v) => parseFloat(v),
+    parse: (v) => parseFloat(v.replace(/[^\d.]/g, '')),
   },
   annual_rate: {
     key: 'annual_rate', label: 'Expected Annual Return',
     placeholder: 'e.g. 7 for 7%', type: 'number',
     // backend expects 0–1 decimal
-    parse: (v) => { const n = parseFloat(v); return n > 1 ? n / 100 : n; },
+    parse: (v) => { const n = parseFloat(v.replace(/[^\d.]/g, '')); return n > 1 ? n / 100 : n; },
   },
 };
 
@@ -177,9 +177,16 @@ function parseExpense(text: string): { amount: number; category: string; descrip
   const dm = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
   if (dm) expense_date = `${dm[3]}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`;
 
-  const descMatch = text.match(/(?:for|on|bought|of)\s+([a-zA-Z ]{2,30?)(?:\s+(?:on\s+\d|today|yesterday|using|₹|rs)|$)/i);
+  // Extract description: words after the amount that aren't stop/date/amount words
+  const STOP = new Set(['today','yesterday','add','expense','log','record','spent','bought','paid','for','using','via','on','the','a','an','my','i']);
+  const amountIdx = text.search(/[₹]|\brs\.?\s*\d|\d+\s*(?:₹|rs\.?)/i);
+  const afterFull = amountIdx >= 0 ? text.slice(amountIdx) : text;
+  const numEnd    = afterFull.search(/\d/) + (afterFull.match(/\d+(?:\.\d+)?/)?.[0].length ?? 0);
+  const trailing  = afterFull.slice(numEnd).trim();
+  const descWords = trailing.split(/\s+/).filter((w) => w.length > 1 && !STOP.has(w.toLowerCase()) && !/^\d/.test(w) && !/[\/:₹]/.test(w));
+  const description = descWords.length > 0 ? descWords.slice(0, 4).join(' ') : undefined;
 
-  return { amount, category, description: descMatch?.[1]?.trim(), expense_date };
+  return { amount, category, description, expense_date };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -357,7 +364,8 @@ function HitlForm({ fields, onSubmit }: {
               </select>
             ) : (
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 placeholder={field.placeholder}
                 value={values[field.key] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
