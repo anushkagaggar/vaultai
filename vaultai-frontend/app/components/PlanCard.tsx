@@ -13,26 +13,26 @@ function getSummary(plan: Plan): string {
   switch (plan.planType) {
     case 'budget': {
       const p = plan as BudgetPlan;
-      return `Save ${formatIndianCurrency(p.monthlySavings)}/mo · ${Math.round(p.minSavingsRate * 100)}% savings rate`;
+      return `Save ${formatIndianCurrency(p.monthlySavings ?? 0)}/mo · ${Math.round((p.minSavingsRate ?? 0) * 100)}% savings rate`;
     }
     case 'invest': {
       const p = plan as InvestPlan;
-      return `${p.riskProfile} risk · ${formatIndianCurrency(p.monthlyAmount)}/mo`;
+      return `${p.riskProfile ?? 'Moderate'} risk · ${formatIndianCurrency(p.monthlyAmount ?? 0)}/mo`;
     }
     case 'goal': {
       const p = plan as GoalPlan;
-      return `${p.goalType.replace(/_/g, ' ')} · ${formatIndianCurrency(p.targetAmount)} in ${p.horizonMonths}mo`;
+      return `${(p.goalType ?? 'Goal').replace(/_/g, ' ')} · ${formatIndianCurrency(p.targetAmount ?? 0)} in ${p.horizonMonths ?? 0}mo`;
     }
     case 'simulate': {
       const p = plan as SimulatePlan;
-      return `${formatIndianCurrency(p.monthlySavings)}/mo · ${p.horizonMonths}mo horizon`;
+      return `${formatIndianCurrency(p.monthlySavings ?? 0)}/mo · ${p.horizonMonths ?? 0}mo horizon`;
     }
   }
 }
 
 export default function PlanCard({ plan }: { plan: Plan }) {
   const meta = TYPE_META[plan.planType];
-  const confidence = Math.round(plan.confidence.overall * 100);
+  const confidence = Math.round((plan.confidence?.overall ?? 0) * 100);
 
   return (
     <div style={{
