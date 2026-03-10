@@ -55,8 +55,10 @@ export default function PlansPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    const refs = loadPlanRefs();
-    if (refs.length === 0) { setLoading(false); return; }
+    let refs = loadPlanRefs();
+    const validRefs = refs.filter((r) => r.id && r.id !== 'undefined' && r.id !== '');
+    if (validRefs.length === 0) { setLoading(false); return; }
+    refs = validRefs;
 
     Promise.allSettled(refs.map((r) => getPlan(r.id)))
       .then((results) => {
@@ -142,7 +144,7 @@ export default function PlansPage() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
             {displayedPlans.map((plan) => (
-              <PlanCard key={plan.id} plan={plan} />
+              <PlanCard key={plan.id || Math.random().toString()} plan={plan} />
             ))}
           </div>
 

@@ -26,7 +26,7 @@ from app.routes import executions
 from app.routes.system import router as system_router
 from app.routes import plans
 
-app = FastAPI(title="VaultAI V2", redirect_slashes=False)
+app = FastAPI(title="VaultAI V2")  # redirect_slashes=True (default) — handles /expenses → /expenses/ automatically
 
 # ── Middleware (order matters: added last = runs first) ───────────────────────
 

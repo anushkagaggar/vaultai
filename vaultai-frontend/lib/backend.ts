@@ -16,11 +16,14 @@ export async function apiFetch(
     ...options.headers,
   };
 
-  // Routes are registered as @router.post('/') making full path /expenses/ etc.
-  // With redirect_slashes=False, /expenses != /expenses/ — must send with slash.
+  // Strip trailing slash to match FastAPI routes (redirect_slashes=False on backend).
+  // Sending a trailing slash to HF Spaces causes a server redirect http→https
+  // which browsers block during CORS preflight. No slash = no redirect.
   const [basePath, qs] = path.split('?');
-  const withSlash = basePath.endsWith('/') ? basePath : basePath + '/';
-  const normPath = qs ? `${withSlash}?${qs}` : withSlash;
+  const cleanBase = basePath.length > 1 && basePath.endsWith('/')
+    ? basePath.slice(0, -1)
+    : basePath;
+  const normPath = qs ? `${cleanBase}?${qs}` : cleanBase;
 
   const res = await fetch(`${API_URL}${normPath}`, {
     ...options,
@@ -158,23 +161,40 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
+export class ApiError extends Error {
+  status: number;
+  detail: string;
+  constructor(status: number, detail: string) {
+    super(detail);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 async function handleResponse(res: Response) {
   if (res.status === 401) {
-    throw new Error("unauthorized");
+    throw new ApiError(401, "unauthorized");
   }
-  
   if (!res.ok) {
-    const errorText = await res.text().catch(() => "Unknown error");
-    throw new Error(`API Error: ${errorText || res.statusText}`);
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    } catch {
+      detail = await res.text().catch(() => res.statusText);
+    }
+    throw new ApiError(res.status, detail);
   }
-  
+  if (res.status === 204) return null;
   return res.json();
 }
+
 
 // ─── Insights ────────────────────────────────────────────────────────────────
 
 export async function getInsights() {
-  const res = await fetch(`${API_URL}/insights/trends/`, {
+  const res = await fetch(`${API_URL}/insights/trends`, {
     headers: getAuthHeaders(),
   });
   
@@ -187,7 +207,7 @@ export async function getInsights() {
 }
 
 export async function runInsights() {
-  const res = await fetch(`${API_URL}/insights/trends/`, {
+  const res = await fetch(`${API_URL}/insights/trends`, {
     method: "POST",
     headers: getAuthHeaders(),
   });
@@ -203,7 +223,7 @@ export async function runInsights() {
 // ─── Executions ──────────────────────────────────────────────────────────────
 
 export async function getExecution(executionId: number) {
-  const res = await fetch(`${API_URL}/executions/${executionId}/`, {
+  const res = await fetch(`${API_URL}/executions/${executionId}`, {
     headers: getAuthHeaders(),
   });
   
@@ -216,7 +236,7 @@ export async function getExecution(executionId: number) {
 }
 
 export async function getSystemMetrics() {
-  const res = await fetch(`${API_URL}/system/metrics/`, {
+  const res = await fetch(`${API_URL}/system/metrics`, {
     headers: getAuthHeaders(),
   });
   
@@ -240,7 +260,7 @@ export async function uploadRagDocument(file: File) {
     ? localStorage.getItem("token") 
     : null;
   
-  const res = await fetch(`${API_URL}/rag/upload/`, {
+  const res = await fetch(`${API_URL}/rag/upload`, {
     method: "POST",
     headers: {
       // Don't set Content-Type for FormData - browser sets it with boundary
@@ -253,7 +273,7 @@ export async function uploadRagDocument(file: File) {
 }
 
 export async function getRagDocuments() {
-  const res = await fetch(`${API_URL}/rag/documents/`, {
+  const res = await fetch(`${API_URL}/rag/documents`, {
     method: "GET",
     headers: getAuthHeaders(),
   });
@@ -263,7 +283,7 @@ export async function getRagDocuments() {
 }
 
 export async function deleteRagDocument(docId: number) {
-  const res = await fetch(`${API_URL}/rag/documents/${docId}/`, {
+  const res = await fetch(`${API_URL}/rag/documents/${docId}`, {
     method: "DELETE",
     headers: getAuthHeaders(),
   });
@@ -272,7 +292,7 @@ export async function deleteRagDocument(docId: number) {
 }
 
 export async function getDocumentStatus(docId: number) {
-  const res = await fetch(`${API_URL}/rag/documents/${docId}/status/`, {
+  const res = await fetch(`${API_URL}/rag/documents/${docId}/status`, {
     method: "GET",
     headers: getAuthHeaders(),
   });
@@ -298,7 +318,7 @@ import type {
 } from "./types/plans";
 
 export async function createBudgetPlan(payload: Record<string, unknown>): Promise<BudgetPlan> {
-  const res = await fetch(`${API_URL}/plans/budget/`, {
+  const res = await fetch(`${API_URL}/plans/budget`, {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify(payload),
@@ -307,7 +327,7 @@ export async function createBudgetPlan(payload: Record<string, unknown>): Promis
 }
 
 export async function createInvestPlan(payload: Record<string, unknown>): Promise<InvestPlan> {
-  const res = await fetch(`${API_URL}/plans/invest/`, {
+  const res = await fetch(`${API_URL}/plans/invest`, {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify(payload),
@@ -316,7 +336,7 @@ export async function createInvestPlan(payload: Record<string, unknown>): Promis
 }
 
 export async function createGoalPlan(payload: Record<string, unknown>): Promise<GoalPlan> {
-  const res = await fetch(`${API_URL}/plans/goal/`, {
+  const res = await fetch(`${API_URL}/plans/goal`, {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify(payload),
@@ -324,22 +344,36 @@ export async function createGoalPlan(payload: Record<string, unknown>): Promise<
   return handleResponse(res);
 }
 
-export async function sendChatMessage(message: string): Promise<ChatResponse> {
-  const res = await fetch(`${API_URL}/plans/chat/`, {
+export async function sendChatMessage(payload: {
+  message: string;
+  income_monthly?:     number;
+  savings_target_pct?: number;
+  fixed_categories?:   string[];
+  investment_amount?:  number;
+  risk_profile?:       string;
+  horizon_months?:     number;
+  goal_type?:          string;
+  target_amount?:      number;
+  current_savings?:    number;
+  monthly_savings?:    number;
+  annual_rate?:        number;
+}): Promise<Record<string, unknown>> {
+  // Use apiFetch so token handling, URL normalisation, and error throwing
+  // are all handled consistently. 422 detail bubbles up as ApiError.
+  return apiFetch("/plans/chat", {
     method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(payload),
   });
-  return handleResponse(res);
 }
 
+
 export async function getPlan(planId: string): Promise<Plan> {
-  const res = await fetch(`${API_URL}/plans/${planId}/`, { headers: getAuthHeaders() });
+  const res = await fetch(`${API_URL}/plans/${planId}`, { headers: getAuthHeaders() });
   return handleResponse(res);
 }
 
 export async function getPlanTrace(planId: string) {
-  const res = await fetch(`${API_URL}/plans/${planId}/trace/`, { headers: getAuthHeaders() });
+  const res = await fetch(`${API_URL}/plans/${planId}/trace`, { headers: getAuthHeaders() });
   return handleResponse(res);
 }
 
