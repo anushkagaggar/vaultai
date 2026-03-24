@@ -1,4 +1,5 @@
 'use client';
+import { Suspense } from 'react';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Calendar, TrendingUp } from 'lucide-react';
@@ -25,7 +26,6 @@ interface RawPlan {
   created_at: string | null;
 }
 
-// Backend graph_trace is string[] — convert to GraphNode[] for the component
 function toGraphNodes(trace: string[]): import('../../../lib/types/plans').GraphNode[] {
   return trace.map((name) => ({
     name,
@@ -41,7 +41,7 @@ function toGraphNodes(trace: string[]): import('../../../lib/types/plans').Graph
   }));
 }
 
-export default function BudgetPlanPage() {
+function BudgetPlanContent() {
   const searchParams = useSearchParams();
   const router       = useRouter();
   const planId       = searchParams.get('id');
@@ -77,7 +77,6 @@ export default function BudgetPlanPage() {
     </AuthenticatedLayout>
   );
 
-  // Extract from raw backend fields
   const o    = plan.projected_outcomes ?? {};
   const asmp = plan.assumptions        ?? {};
   const conf = plan.confidence         ?? {};
@@ -89,8 +88,7 @@ export default function BudgetPlanPage() {
   const annualSavings  = Number(o.annual_savings       ?? 0);
   const overallConf    = Number(conf.overall           ?? 0);
 
-  const hasScenarios = false; // budget_optimize is a stub — no scenarios yet
-
+  const hasScenarios = false;
 
   return (
     <AuthenticatedLayout title="Budget Plan">
@@ -149,7 +147,6 @@ export default function BudgetPlanPage() {
         </div>
 
         {false && <ProjectionChart data={[]} label="12-Month Savings Projection" />}
-        
 
         {plan.explanation && (
           <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 24 }}>
@@ -162,5 +159,13 @@ export default function BudgetPlanPage() {
         <AssumptionsBlock assumptions={plan.assumptions ?? {}} />
       </div>
     </AuthenticatedLayout>
+  );
+}
+
+export default function BudgetPlanPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: '#475569', fontSize: 13 }}>Loading...</div>}>
+      <BudgetPlanContent />
+    </Suspense>
   );
 }

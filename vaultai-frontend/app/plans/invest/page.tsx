@@ -1,4 +1,5 @@
 'use client';
+import { Suspense } from 'react';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Calendar } from 'lucide-react';
@@ -9,7 +10,6 @@ import AssumptionsBlock from '../../components/AssumptionsBlock';
 import { formatIndianCurrency, getRelativeTime } from '../../../lib/planUtils';
 import { getPlan, ApiError } from '../../../lib/backend';
 
-// Raw backend PlanDetailResponse shape — no frontend type mapping
 interface RawPlan {
   plan_id:            number | null;
   plan_type:          string;
@@ -25,9 +25,8 @@ interface RawPlan {
 
 const ALLOC_COLORS = { equity: '#6366F1', debt: '#F59E0B', liquid: '#14B8A6' } as const;
 const FRESH_COLOR: Record<string, string>  = { live: '#10B981', cached: '#F59E0B', fallback: '#EF4444' };
-const FRESH_LABEL: Record<string, string>  = { live: 'Live Data', cached: 'Cached',    fallback: 'Fallback'  };
+const FRESH_LABEL: Record<string, string>  = { live: 'Live Data', cached: 'Cached', fallback: 'Fallback' };
 
-// Mini bar to visualise allocation percentage
 function AllocBar({ pct, color }: { pct: number; color: string }) {
   return (
     <div style={{ height: 6, borderRadius: 3, background: '#2E3248', overflow: 'hidden', flex: 1 }}>
@@ -36,7 +35,6 @@ function AllocBar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
-// Backend graph_trace is string[] — convert to GraphNode[] for the component
 function toGraphNodes(trace: string[]): import('../../../lib/types/plans').GraphNode[] {
   return trace.map((name) => ({
     name,
@@ -52,7 +50,7 @@ function toGraphNodes(trace: string[]): import('../../../lib/types/plans').Graph
   }));
 }
 
-export default function InvestPlanPage() {
+function InvestPlanContent() {
   const searchParams = useSearchParams();
   const router       = useRouter();
   const planId       = searchParams.get('id');
@@ -88,30 +86,29 @@ export default function InvestPlanPage() {
     </AuthenticatedLayout>
   );
 
-  // ── Pull directly from projected_outcomes (what the backend actually returns) ──
   const o    = plan.projected_outcomes  ?? {};
   const asmp = plan.assumptions         ?? {};
   const conf = plan.confidence          ?? {};
 
-  const riskProfile     = String(o.risk_profile      ?? asmp.risk_profile     ?? '—');
-  const investmentAmount= Number(asmp.investment_amount ?? o.total_allocated  ?? 0);
-  const totalAllocated  = Number(o.total_allocated   ?? investmentAmount);
+  const riskProfile      = String(o.risk_profile      ?? asmp.risk_profile     ?? '—');
+  const investmentAmount = Number(asmp.investment_amount ?? o.total_allocated  ?? 0);
+  const totalAllocated   = Number(o.total_allocated   ?? investmentAmount);
 
-  const equityPct   = Number(o.equity_pct   ?? 0);
-  const debtPct     = Number(o.debt_pct     ?? 0);
-  const liquidPct   = Number(o.liquid_pct   ?? 0);
-  const equityAmt   = Number(o.equity_amount ?? 0);
-  const debtAmt     = Number(o.debt_amount   ?? 0);
-  const liquidAmt   = Number(o.liquid_amount ?? 0);
+  const equityPct  = Number(o.equity_pct   ?? 0);
+  const debtPct    = Number(o.debt_pct     ?? 0);
+  const liquidPct  = Number(o.liquid_pct   ?? 0);
+  const equityAmt  = Number(o.equity_amount ?? 0);
+  const debtAmt    = Number(o.debt_amount   ?? 0);
+  const liquidAmt  = Number(o.liquid_amount ?? 0);
 
-  const overallConf     = Number(conf.overall           ?? 0);
-  const externalFresh   = String(conf.external_freshness ?? conf.externalFreshness ?? 'fallback');
-  const freshColor      = FRESH_COLOR[externalFresh] ?? '#EF4444';
+  const overallConf   = Number(conf.overall           ?? 0);
+  const externalFresh = String(conf.external_freshness ?? conf.externalFreshness ?? 'fallback');
+  const freshColor    = FRESH_COLOR[externalFresh] ?? '#EF4444';
 
   const allocRows = [
-    { label: 'Equity',  pct: equityPct, amount: equityAmt, color: ALLOC_COLORS.equity  },
-    { label: 'Debt',    pct: debtPct,   amount: debtAmt,   color: ALLOC_COLORS.debt    },
-    { label: 'Liquid',  pct: liquidPct, amount: liquidAmt, color: ALLOC_COLORS.liquid  },
+    { label: 'Equity', pct: equityPct, amount: equityAmt, color: ALLOC_COLORS.equity },
+    { label: 'Debt',   pct: debtPct,   amount: debtAmt,   color: ALLOC_COLORS.debt   },
+    { label: 'Liquid', pct: liquidPct, amount: liquidAmt, color: ALLOC_COLORS.liquid },
   ];
 
   const RISK_COLOR: Record<string, string> = { conservative: '#10B981', moderate: '#F59E0B', aggressive: '#EF4444' };
@@ -121,7 +118,6 @@ export default function InvestPlanPage() {
     <AuthenticatedLayout title="Investment Plan">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* ── Header ── */}
         <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -157,7 +153,6 @@ export default function InvestPlanPage() {
           </div>
         </div>
 
-        {/* ── Key figures ── */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 20 }}>
             <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Investment Amount</p>
@@ -173,7 +168,6 @@ export default function InvestPlanPage() {
           </div>
         </div>
 
-        {/* ── Allocation breakdown ── */}
         <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ padding: '12px 20px', background: '#0F1117', borderBottom: '1px solid #2E3248' }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
@@ -205,7 +199,6 @@ export default function InvestPlanPage() {
           </div>
         </div>
 
-        {/* ── Horizon ── */}
         {Number(asmp.horizon_months) > 0 && (
           <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 20 }}>
             <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Investment Horizon</p>
@@ -218,7 +211,6 @@ export default function InvestPlanPage() {
           </div>
         )}
 
-        {/* ── Data freshness ── */}
         <div style={{ padding: '12px 16px', borderRadius: 10, background: `${freshColor}10`, border: `1px solid ${freshColor}30`, display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: freshColor, flexShrink: 0 }} />
           <span style={{ fontSize: 13, fontWeight: 600, color: freshColor }}>
@@ -227,7 +219,6 @@ export default function InvestPlanPage() {
           <span style={{ fontSize: 12, color: '#94A3B8' }}>Market data freshness</span>
         </div>
 
-        {/* ── AI Narration ── */}
         {plan.explanation && (
           <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 24 }}>
             <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: 'rgba(99,102,241,0.15)', color: '#A5B4FC', fontWeight: 600 }}>
@@ -241,5 +232,13 @@ export default function InvestPlanPage() {
         <AssumptionsBlock assumptions={plan.assumptions ?? {}} />
       </div>
     </AuthenticatedLayout>
+  );
+}
+
+export default function InvestPlanPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: '#475569', fontSize: 13 }}>Loading...</div>}>
+      <InvestPlanContent />
+    </Suspense>
   );
 }
