@@ -5,13 +5,14 @@ FROM python:3.11
 WORKDIR /code
 
 # Copy requirements file
-COPY ./requirements.txt /code/requirements.txt
+COPY ./backend/requirements.txt /code/requirements.txt
 
 # Install dependencies
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
 # Copy the rest of the application code
-COPY . /code
+COPY ./backend /code
 
 # Create a non-root user (Security best practice for HF Spaces)
 RUN useradd -m -u 1000 user
