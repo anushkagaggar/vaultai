@@ -41,7 +41,7 @@ pinned: false
 |---------|-----|--------|
 | V1 — Secure Ledger | [`v1.0.0`](https://github.com/anushkagaggar/vaultai/releases/tag/v1.0.0) | CRUD + auth |
 | V2 — Insight Engine | [`v2.0.0`](https://github.com/anushkagaggar/vaultai/releases/tag/v2.0.0) | Descriptive analytics + validation |
-| V3 — Strategy Lab | `main` | Prescriptive planning + agent graph |
+| V3 — Strategy Lab | [`v3.0.0`](https://github.com/anushkagaggar/vaultai/releases/tag/v3.0.0) | Prescriptive planning + agent graph |
 
 ---
 
