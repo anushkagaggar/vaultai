@@ -1,31 +1,23 @@
-# Use Python 3.11
-FROM python:3.11
+FROM python:3.11-slim
 
-# Set working directory to /code
 WORKDIR /code
 
-# Copy requirements file
-COPY ./backend/requirements.txt /code/requirements.txt
-
-# Install dependencies
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+# Install torch CPU-only first (smaller)
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# Copy the rest of the application code
+# Install dependencies
+COPY ./backend/requirements.txt /code/requirements.txt
+RUN pip install --no-cache-dir -r /code/requirements.txt
+
+# Copy backend code only
 COPY ./backend /code
 
-# Create a non-root user (Security best practice for HF Spaces)
-RUN useradd -m -u 1000 user
+# Create user and fix ownership
+RUN useradd -m -u 1000 user && chown -R user:user /code
+
 USER user
-ENV HOME=/home/user \
-	PATH=/home/user/.local/bin:$PATH
+ENV HOME=/home/user PATH=/home/user/.local/bin:$PATH
 
-# Set the working directory to the user's home
-WORKDIR $HOME/app
+WORKDIR /code
 
-# Copy the code again to the user's directory (Permissions fix)
-COPY --chown=user . $HOME/app
-
-# Command to run the application
-# Note: HF Spaces expects the app to run on port 7860
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
