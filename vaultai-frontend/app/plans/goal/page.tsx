@@ -1,4 +1,5 @@
 'use client';
+import { Suspense } from 'react';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Calendar, AlertTriangle, Target } from 'lucide-react';
@@ -8,7 +9,6 @@ import AssumptionsBlock from '../../components/AssumptionsBlock';
 import { formatIndianCurrency, getRelativeTime } from '../../../lib/planUtils';
 import { getPlan, ApiError } from '../../../lib/backend';
 
-// Raw backend PlanDetailResponse — no frontend type mapping
 interface RawPlan {
   plan_id:            number | null;
   plan_type:          string;
@@ -43,7 +43,6 @@ function toGraphNodes(trace: string[]): import('../../../lib/types/plans').Graph
   }));
 }
 
-// Simple coverage bar
 function CoverageBar({ ratio, color }: { ratio: number; color: string }) {
   const pct = Math.min(Math.round(ratio * 100), 100);
   return (
@@ -53,7 +52,7 @@ function CoverageBar({ ratio, color }: { ratio: number; color: string }) {
   );
 }
 
-export default function GoalPlanPage() {
+function GoalPlanContent() {
   const searchParams = useSearchParams();
   const router       = useRouter();
   const planId       = searchParams.get('id');
@@ -89,37 +88,34 @@ export default function GoalPlanPage() {
     </AuthenticatedLayout>
   );
 
-  // ── Pull directly from projected_outcomes (real backend keys) ─────────────
   const o    = plan.projected_outcomes ?? {};
   const asmp = plan.assumptions        ?? {};
   const conf = plan.confidence         ?? {};
 
-  const goalType        = String(o.goal_type        ?? asmp.goal_type     ?? '—');
-  const targetAmount    = Number(o.target_amount    ?? asmp.target_amount ?? 0);
-  const horizonMonths   = Number(o.horizon_months   ?? asmp.horizon_months ?? 0);
-  const projectedBalance= Number(o.projected_balance ?? 0);
-  const coverageRatio   = Number(o.coverage_ratio   ?? 0);
-  const gapAmount       = Number(o.gap_amount       ?? 0);
-  const surplus         = Number(o.surplus          ?? 0);
-  const monthsToGoal    = o.months_to_goal != null ? Number(o.months_to_goal) : null;
-  const feasibilityLabel= String(o.feasibility_label ?? 'FEASIBLE').toUpperCase();
-  const contribRequired = Number(o.contribution_required ?? 0);
-  const overallConf     = Number(conf.overall ?? 0);
+  const goalType         = String(o.goal_type        ?? asmp.goal_type     ?? '—');
+  const targetAmount     = Number(o.target_amount    ?? asmp.target_amount ?? 0);
+  const horizonMonths    = Number(o.horizon_months   ?? asmp.horizon_months ?? 0);
+  const projectedBalance = Number(o.projected_balance ?? 0);
+  const coverageRatio    = Number(o.coverage_ratio   ?? 0);
+  const gapAmount        = Number(o.gap_amount       ?? 0);
+  const surplus          = Number(o.surplus          ?? 0);
+  const monthsToGoal     = o.months_to_goal != null ? Number(o.months_to_goal) : null;
+  const feasibilityLabel = String(o.feasibility_label ?? 'FEASIBLE').toUpperCase();
+  const contribRequired  = Number(o.contribution_required ?? 0);
+  const overallConf      = Number(conf.overall ?? 0);
 
-  // Debt-specific fields
   const isDebt         = goalType === 'debt';
   const totalMonths    = Number(o.total_months    ?? 0);
   const totalInterest  = Number(o.total_interest_paid ?? 0);
   const payoffSchedule = Array.isArray(o.payoff_schedule) ? (o.payoff_schedule as Record<string, unknown>[]) : [];
 
-  const fColor   = FEASIBILITY_COLOR[feasibilityLabel] ?? '#6366F1';
+  const fColor    = FEASIBILITY_COLOR[feasibilityLabel] ?? '#6366F1';
   const goalTitle = goalType.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 
   return (
     <AuthenticatedLayout title="Goal Plan">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* ── Header ── */}
         <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -152,12 +148,11 @@ export default function GoalPlanPage() {
           </div>
         </div>
 
-        {/* ── Summary cards ── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
           {[
-            { label: 'Target Amount',    value: formatIndianCurrency(targetAmount),              color: '#6366F1', icon: Target   },
-            { label: 'Time Horizon',     value: horizonMonths > 0 ? `${horizonMonths} mo` : '—', color: '#10B981', icon: Calendar },
-            { label: 'Coverage',         value: `${Math.round(coverageRatio * 100)}%`,           color: fColor,    icon: Target   },
+            { label: 'Target Amount', value: formatIndianCurrency(targetAmount),              color: '#6366F1', icon: Target   },
+            { label: 'Time Horizon',  value: horizonMonths > 0 ? `${horizonMonths} mo` : '—', color: '#10B981', icon: Calendar },
+            { label: 'Coverage',      value: `${Math.round(coverageRatio * 100)}%`,           color: fColor,    icon: Target   },
           ].map(({ label, value, color, icon: Icon }) => (
             <div key={label} style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 18 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -169,7 +164,6 @@ export default function GoalPlanPage() {
           ))}
         </div>
 
-        {/* ── Coverage bar + gap/surplus ── */}
         <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0 }}>Goal Progress</p>
@@ -197,7 +191,6 @@ export default function GoalPlanPage() {
           </div>
         </div>
 
-        {/* ── Key details ── */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           {contribRequired > 0 && (
             <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 18 }}>
@@ -213,7 +206,6 @@ export default function GoalPlanPage() {
           )}
         </div>
 
-        {/* ── Infeasible warning ── */}
         {feasibilityLabel === 'INFEASIBLE' && (
           <div style={{ padding: 16, borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
             <AlertTriangle size={18} color="#EF4444" style={{ flexShrink: 0, marginTop: 2 }} />
@@ -226,7 +218,6 @@ export default function GoalPlanPage() {
           </div>
         )}
 
-        {/* ── Debt payoff table ── */}
         {isDebt && payoffSchedule.length > 0 && (
           <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, overflow: 'hidden' }}>
             <div style={{ padding: '12px 20px', background: '#0F1117', borderBottom: '1px solid #2E3248', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -263,7 +254,6 @@ export default function GoalPlanPage() {
           </div>
         )}
 
-        {/* ── AI Narration ── */}
         {plan.explanation && (
           <div style={{ background: '#1A1D27', border: '1px solid #2E3248', borderRadius: 12, padding: 24 }}>
             <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: 'rgba(99,102,241,0.15)', color: '#A5B4FC', fontWeight: 600 }}>AI Narration</span>
@@ -275,5 +265,13 @@ export default function GoalPlanPage() {
         <AssumptionsBlock assumptions={plan.assumptions ?? {}} />
       </div>
     </AuthenticatedLayout>
+  );
+}
+
+export default function GoalPlanPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: '#475569', fontSize: 13 }}>Loading...</div>}>
+      <GoalPlanContent />
+    </Suspense>
   );
 }
