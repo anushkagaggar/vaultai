@@ -26,16 +26,20 @@ from app.routes import executions
 from app.routes.system import router as system_router
 from app.routes import plans
 
-app = FastAPI(title="VaultAI V2")  # redirect_slashes=True (default) — handles /expenses → /expenses/ automatically
+# ── LLMOps Phase 1: structured JSON logging ───────────────────────────────────
+from app.agents.ops_logger import configure_logging
 
-# ── Middleware (order matters: added last = runs first) ───────────────────────
+# ── LLMOps Phase 3: Prometheus HTTP instrumentation ──────────────────────────
+from prometheus_fastapi_instrumentator import Instrumentator
 
-# 1. ProxyHeadersMiddleware — must be outermost so it rewrites X-Forwarded-*
-#    headers before CORS sees the request. Tells uvicorn the real scheme is
-#    https even though HF Spaces terminates SSL at the nginx proxy.
+app = FastAPI(title="VaultAI V3")
+
+# ── LLMOps Phase 3: expose GET /metrics ──────────────────────────────────────
+# Must be called before routes are added so every route gets instrumented.
+Instrumentator().instrument(app).expose(app)
+
+# ── Middleware ────────────────────────────────────────────────────────────────
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
-
-# 2. CORS — separate call, correct syntax
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -55,7 +59,7 @@ app.add_exception_handler(Exception, generic_exception_handler)
 # ── HTTP middleware ───────────────────────────────────────────────────────────
 app.middleware("http")(log_requests)
 
-# ── Routers ───────────────────────────────────────────────────────────────────
+# ── Routers (unchanged) ───────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(expenses.router)
 app.include_router(insights.router)
@@ -70,19 +74,33 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 
+# ── LLMOps Phase 1: configure vaultai.ops and vaultai.agents loggers ─────────
+configure_logging(log_level="INFO")
+
 # ── Startup ───────────────────────────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
+    # Qdrant
     try:
         init_collection()
         print("Qdrant connected")
     except Exception as e:
         print("Qdrant unavailable — RAG disabled:", e)
 
+    # ── LLMOps Phase 2: initialise MLflow experiments ─────────────────────
+    # Degrades silently when MLFLOW_TRACKING_URI is not set or server is down.
+    try:
+        from app.agents.mlflow_tracker import init_mlflow_experiments
+        init_mlflow_experiments()
+    except Exception as e:
+        logging.getLogger("vaultai.ops").warning(
+            '{"event":"mlflow_startup_skipped","reason":"%s"}', str(e)
+        )
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/")
 def root():
-    return {"status": "VaultAI V2 API Running"}
+    return {"status": "VaultAI V3 API Running"}
 
 @app.get("/health")
 def health():

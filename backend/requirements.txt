@@ -50,3 +50,6 @@ python-multipart
 sentence-transformers 
 torch
 langgraph
+mlflow>=2.13 
+prometheus-fastapi-instrumentator>=6.1 
+prometheus-client>=0.20
